@@ -10,6 +10,9 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -20,7 +23,7 @@ export default function DashboardPage() {
         if (cancelled) return;
         setUser(meRes.user);
 
-        const projectsRes = await api.projects();
+        const projectsRes = await api.projects.list();
         if (cancelled) return;
         setProjects(projectsRes.projects || []);
       } catch {
@@ -41,10 +44,24 @@ export default function DashboardPage() {
     router.push('/login');
   }
 
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setError('');
+    try {
+      const { project } = await api.projects.create(newName.trim());
+      setProjects((prev) => [project, ...prev]);
+      setNewName('');
+      setCreating(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ink">
-        <p className="font-mono text-sm text-mist">Verifying session…</p>
+        <p className="font-mono text-sm text-mist">Verifying session\u2026</p>
       </main>
     );
   }
@@ -53,15 +70,12 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-ink">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Link href="/" className="font-mono text-sm text-signal">
-            <img 
-    src="/lock.svg" 
-    alt="Envguard icon" 
-    className="inline-block h-5 w-5 text-signal align-middle" 
-  /> 
-  <span className="align-middle">envguard</span>
+          <Link href="/" className="flex items-center gap-2 font-mono text-sm text-signal">
+            <img src="/leaf_and_lock.png" alt="" className="h-5 w-5" />
+            envguard
           </Link>
           <div className="flex items-center gap-4">
+            <span className="text-sm text-mist">{user?.email}</span>
             <button
               onClick={handleLogout}
               className="rounded-sm border border-line px-3 py-1.5 text-sm text-mist hover:border-signal/40 hover:text-paper"
@@ -73,26 +87,80 @@ export default function DashboardPage() {
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <h1 className="text-2xl font-semibold text-paper">Your projects</h1>
-        <p className="mt-1 text-sm text-mist">
-          Every secret here is stored encrypted the server never sees plaintext.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-paper">Your projects</h1>
+            <p className="mt-1 text-sm text-mist">
+              Every secret is encrypted at rest \u2014 organized by project and environment.
+            </p>
+          </div>
+          {!creating && (
+            <button
+              onClick={() => setCreating(true)}
+              className="rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90"
+            >
+              + New project
+            </button>
+          )}
+        </div>
 
-        {projects.length === 0 ? (
+        {creating && (
+          <form
+            onSubmit={handleCreate}
+            className="mt-6 flex flex-col gap-3 rounded-sm border border-line bg-surface p-4 sm:flex-row sm:items-center"
+          >
+            <input
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Project name, e.g. my-saas-app"
+              className="flex-1 rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+            />
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                className="rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90"
+              >
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(false);
+                  setNewName('');
+                  setError('');
+                }}
+                className="text-sm text-mist hover:text-paper"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
+        {error && <p className="mt-3 text-sm text-alert">{error}</p>}
+
+        {projects.length === 0 && !creating ? (
           <div className="mt-8 rounded-sm border border-dashed border-line p-10 text-center">
             <p className="font-mono text-sm text-mist">No projects yet.</p>
             <p className="mt-1 text-sm text-mist">
               Create one to start encrypting environment variables.
             </p>
-            <button className="mt-6 rounded-sm bg-signal px-5 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-              + New project
-            </button>
           </div>
         ) : (
-          <ul className="mt-8 space-y-3">
+          <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((p) => (
-              <li key={p.id} className="rounded-sm border border-line bg-surface p-4 text-paper">
-                {p.name}
+              <li key={p.id}>
+                <Link
+                  href={`/dashboard/${p.id}`}
+                  className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
+                >
+                  <p className="font-mono text-xs uppercase tracking-wider text-signal">Project</p>
+                  <h3 className="mt-2 text-lg font-medium text-paper">{p.name}</h3>
+                  <p className="mt-1 text-xs text-mist">
+                    Created {new Date(p.created_at).toLocaleDateString()}
+                  </p>
+                </Link>
               </li>
             ))}
           </ul>
