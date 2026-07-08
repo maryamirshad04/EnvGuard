@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 
 export default function ProjectDetailPage() {
-  const { projectId } = useParams();
+  const { companyId, projectId } = useParams();
   const router = useRouter();
 
   const [project, setProject] = useState(null);
@@ -30,7 +30,7 @@ export default function ProjectDetailPage() {
       if (!envId) return;
       setVarsLoading(true);
       try {
-        const res = await api.projects.listVariables(projectId, envId);
+        const res = await api.companies.projects.listVariables(companyId, projectId, envId);
         setVariables(res.variables || []);
       } catch (err) {
         setError(err.message);
@@ -38,7 +38,7 @@ export default function ProjectDetailPage() {
         setVarsLoading(false);
       }
     },
-    [projectId]
+    [companyId, projectId]
   );
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function ProjectDetailPage() {
 
     async function load() {
       try {
-        const res = await api.projects.get(projectId);
+        const res = await api.companies.projects.get(companyId, projectId);
         if (cancelled) return;
         setProject(res.project);
         setEnvironments(res.environments || []);
@@ -56,11 +56,7 @@ export default function ProjectDetailPage() {
           await loadVariables(first.id);
         }
       } catch (err) {
-        if (err.message?.toLowerCase().includes('not found')) {
-          router.push('/dashboard');
-        } else {
-          router.push('/login');
-        }
+        router.push(err.message?.toLowerCase().includes('not found') ? `/dashboard/${companyId}` : '/login');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -70,8 +66,7 @@ export default function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [companyId, projectId]);
 
   async function handleSwitchEnv(envId) {
     setActiveEnvId(envId);
@@ -85,7 +80,11 @@ export default function ProjectDetailPage() {
     if (!newEnvName.trim()) return;
     setError('');
     try {
-      const { environment } = await api.projects.createEnvironment(projectId, newEnvName.trim());
+      const { environment } = await api.companies.projects.createEnvironment(
+        companyId,
+        projectId,
+        newEnvName.trim()
+      );
       setEnvironments((prev) => [...prev, environment]);
       setNewEnvName('');
       setAddingEnv(false);
@@ -100,7 +99,8 @@ export default function ProjectDetailPage() {
     if (!newKey.trim() || !newValue) return;
     setError('');
     try {
-      const { variable } = await api.projects.upsertVariable(
+      const { variable } = await api.companies.projects.upsertVariable(
+        companyId,
         projectId,
         activeEnvId,
         newKey.trim(),
@@ -119,7 +119,7 @@ export default function ProjectDetailPage() {
 
   async function handleDeleteVariable(varId) {
     try {
-      await api.projects.deleteVariable(projectId, activeEnvId, varId);
+      await api.companies.projects.deleteVariable(companyId, projectId, activeEnvId, varId);
       setVariables((prev) => prev.filter((v) => v.id !== varId));
     } catch (err) {
       setError(err.message);
@@ -139,7 +139,7 @@ export default function ProjectDetailPage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ink">
-        <p className="font-mono text-sm text-mist">Loading project\u2026</p>
+        <p className="font-mono text-sm text-mist">Loading project</p>
       </main>
     );
   }
@@ -149,11 +149,15 @@ export default function ProjectDetailPage() {
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
           <Link href="/dashboard" className="flex items-center gap-2 font-mono text-sm text-signal">
-            <img src="/leaf_and_lock.png" alt="" className="h-5 w-5" />
-            envguard
+            <img 
+    src="/lock.svg" 
+    alt="Envguard icon" 
+    className="inline-block h-5 w-5 text-signal align-middle" 
+  /> 
+  <span className="align-middle">envguard</span>
           </Link>
-          <Link href="/dashboard" className="text-sm text-mist hover:text-paper">
-            &larr; All projects
+          <Link href={`/dashboard/${companyId}`} className="text-sm text-mist hover:text-paper">
+            &larr; Back to company
           </Link>
         </div>
       </header>
@@ -162,7 +166,6 @@ export default function ProjectDetailPage() {
         <p className="font-mono text-xs uppercase tracking-wider text-signal">Project</p>
         <h1 className="mt-2 text-2xl font-semibold text-paper">{project?.name}</h1>
 
-        {/* Environment tabs */}
         <div className="mt-8 flex flex-wrap items-center gap-2 border-b border-line pb-4">
           {environments.map((env) => (
             <button
@@ -184,7 +187,7 @@ export default function ProjectDetailPage() {
                 autoFocus
                 value={newEnvName}
                 onChange={(e) => setNewEnvName(e.target.value)}
-                placeholder="e.g. qa"
+                placeholder="e.g. Testing"
                 className="w-28 rounded-sm border border-line bg-surface px-2 py-1.5 text-xs text-paper outline-none focus:border-signal"
               />
               <button type="submit" className="text-xs text-signal hover:underline">
@@ -210,7 +213,6 @@ export default function ProjectDetailPage() {
 
         {error && <p className="mt-4 text-sm text-alert">{error}</p>}
 
-        {/* Add variable form */}
         <form
           onSubmit={handleAddVariable}
           className="mt-6 flex flex-col gap-3 rounded-sm border border-line bg-surface p-4 sm:flex-row sm:items-end"
@@ -242,10 +244,9 @@ export default function ProjectDetailPage() {
           </button>
         </form>
 
-        {/* Variables list */}
         <div className="mt-6">
           {varsLoading ? (
-            <p className="font-mono text-sm text-mist">Loading variables\u2026</p>
+            <p className="font-mono text-sm text-mist">Loading variables</p>
           ) : variables.length === 0 ? (
             <div className="rounded-sm border border-dashed border-line p-10 text-center">
               <p className="font-mono text-sm text-mist">No variables in this environment yet.</p>

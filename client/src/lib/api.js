@@ -22,29 +22,57 @@ export const api = {
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   me: () => request('/api/auth/me'),
 
-  projects: {
-    list: () => request('/api/projects'),
-    create: (name) => request('/api/projects', { method: 'POST', body: JSON.stringify({ name }) }),
-    get: (projectId) => request(`/api/projects/${projectId}`),
+  companies: {
+    list: () => request('/api/companies'),
+    create: (name) => request('/api/companies', { method: 'POST', body: JSON.stringify({ name }) }),
+    get: (companyId) => request(`/api/companies/${companyId}`),
+    members: (companyId) => request(`/api/companies/${companyId}/members`),
 
-    createEnvironment: (projectId, name) =>
-      request(`/api/projects/${projectId}/environments`, {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      }),
+    invites: {
+      list: (companyId) => request(`/api/companies/${companyId}/invites`),
+      create: (companyId, email, role) =>
+        request(`/api/companies/${companyId}/invites`, {
+          method: 'POST',
+          body: JSON.stringify({ email, role }),
+        }),
+      revoke: (companyId, inviteId) =>
+        request(`/api/companies/${companyId}/invites/${inviteId}`, { method: 'DELETE' }),
+    },
 
-    listVariables: (projectId, envId) =>
-      request(`/api/projects/${projectId}/environments/${envId}/variables`),
+    projects: {
+      list: (companyId) => request(`/api/companies/${companyId}/projects`),
+      create: (companyId, name) =>
+        request(`/api/companies/${companyId}/projects`, {
+          method: 'POST',
+          body: JSON.stringify({ name }),
+        }),
+      get: (companyId, projectId) => request(`/api/companies/${companyId}/projects/${projectId}`),
 
-    upsertVariable: (projectId, envId, key, value) =>
-      request(`/api/projects/${projectId}/environments/${envId}/variables`, {
-        method: 'POST',
-        body: JSON.stringify({ key, value }),
-      }),
+      createEnvironment: (companyId, projectId, name) =>
+        request(`/api/companies/${companyId}/projects/${projectId}/environments`, {
+          method: 'POST',
+          body: JSON.stringify({ name }),
+        }),
 
-    deleteVariable: (projectId, envId, varId) =>
-      request(`/api/projects/${projectId}/environments/${envId}/variables/${varId}`, {
-        method: 'DELETE',
-      }),
+      listVariables: (companyId, projectId, envId) =>
+        request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables`),
+
+      upsertVariable: (companyId, projectId, envId, key, value) =>
+        request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables`, {
+          method: 'POST',
+          body: JSON.stringify({ key, value }),
+        }),
+
+      deleteVariable: (companyId, projectId, envId, varId) =>
+        request(
+          `/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables/${varId}`,
+          { method: 'DELETE' }
+        ),
+    },
+  },
+
+  invites: {
+    get: (token) => request(`/api/invites/${token}`),
+    accept: (token) => request(`/api/invites/${token}/accept`, { method: 'POST' }),
   },
 };

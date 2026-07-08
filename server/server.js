@@ -4,7 +4,8 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const authRoutes = require('./src/routes/auth');
-const projectRoutes = require('./src/routes/projects');
+const companyRoutes = require('./src/routes/companies');
+const inviteRoutes = require('./src/routes/invites');
 
 const app = express();
 
@@ -18,7 +19,8 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
-app.use('/api/projects', projectRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/invites', inviteRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

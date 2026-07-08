@@ -1,24 +1,66 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
 export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-ink">
+          <p className="font-mono text-sm text-mist">Loading</p>
+        </main>
+      }
+    >
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/dashboard';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  function validateEmail(email) {
+
+    if (!email.includes('@')) {
+      return 'Email must contain @ symbol';
+    }
+    
+    const parts = email.split('@');
+    if (parts.length !== 2) {
+      return 'Invalid email format';
+    }
+    
+    if (parts[0].length === 0 || parts[1].length === 0) {
+      return 'Email must have content before and after @';
+    }
+    
+    return null;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = validateEmail(email);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
+
     try {
       await api.signup(email, password);
-      router.push('/dashboard');
+      router.push(redirect);
     } catch (err) {
       setError(err.message);
     } finally {

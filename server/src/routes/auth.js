@@ -37,10 +37,23 @@ router.post('/signup', async (req, res) => {
     .select('id, email')
     .single();
 
-  if (error) {
-  console.error('Supabase insert error:', error);
-  return res.status(500).json({ error: error.message });
-}
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Every new user gets a default company workspace, as its admin.
+  const { data: company, error: companyError } = await supabase
+    .from('companies')
+    .insert({ name: 'My Workspace', created_by: data.id })
+    .select()
+    .single();
+
+  if (companyError) {
+    console.error('Failed to create default company:', companyError);
+  } else {
+    const { error: memberError } = await supabase
+      .from('company_members')
+      .insert({ company_id: company.id, user_id: data.id, role: 'admin' });
+    if (memberError) console.error('Failed to add default company membership:', memberError);
+  }
 
   const token = jwt.sign({ userId: data.id, email: data.email }, process.env.JWT_SECRET, {
     expiresIn: '7d',
