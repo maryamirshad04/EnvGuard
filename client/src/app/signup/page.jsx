@@ -23,6 +23,11 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/dashboard';
+
+  useEffect(() => {
+    console.log('API URL:', process.env.NEXT_PUBLIC_API_URL);
+  }, []);
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
