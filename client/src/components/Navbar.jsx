@@ -8,9 +8,9 @@ export default function Navbar() {
   <img 
     src="/lock.svg" 
     alt="Envguard icon" 
-    className="h-5 w-5 text-signal" 
-  />
-  envguard
+    className="inline-block h-5 w-5 text-signal align-middle" 
+  /> 
+  <span className="align-middle">envguard</span>
 </Link>
         <div className="hidden items-center gap-8 text-sm text-mist md:flex">
           <a href="#how-it-works" className="hover:text-paper">How it works</a>

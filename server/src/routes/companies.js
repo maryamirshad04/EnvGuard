@@ -323,4 +323,114 @@ router.delete(
   }
 );
 
+router.get(
+  '/:companyId/projects/:projectId/environments/:envId/variables',
+  requireMember,
+  async (req, res) => {
+    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+
+    const { data, error } = await supabase
+      .from('env_variables')
+      .select('*')
+      .eq('environment_id', env.id)
+      .order('key', { ascending: true });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const variables = data.map((v) => ({
+      id: v.id,
+      key: v.key,
+      value: decrypt(v.value_encrypted),
+      is_secret: v.is_secret,
+      updated_at: v.updated_at,
+    }));
+
+    res.json({ variables });
+  }
+);
+
+router.post(
+  '/:companyId/projects/:projectId/environments/:envId/variables',
+  requireMember,
+  async (req, res) => {
+    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+
+    const { key, value, is_secret } = req.body;
+    if (!key?.trim() || value === undefined || value === '') {
+      return res.status(400).json({ error: 'Both key and value are required' });
+    }
+
+    const value_encrypted = encrypt(value);
+
+    const { data, error } = await supabase
+      .from('env_variables')
+      .upsert(
+        {
+          environment_id: env.id,
+          key: key.trim(),
+          value_encrypted,
+          is_secret: is_secret !== false,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'environment_id,key' }
+      )
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    res.status(201).json({
+      variable: { id: data.id, key: data.key, value, is_secret: data.is_secret, updated_at: data.updated_at },
+    });
+  }
+);
+
+// Bulk import
+router.post(
+  '/:companyId/projects/:projectId/environments/:envId/variables/bulk',
+  requireMember,
+  async (req, res) => {
+    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+
+    const { variables } = req.body;
+    if (!Array.isArray(variables) || variables.length === 0) {
+      return res.status(400).json({ error: 'No variables to import' });
+    }
+
+    const valid = variables.filter((v) => v.key?.trim() && v.value !== undefined && v.value !== '');
+    if (valid.length === 0) {
+      return res.status(400).json({ error: 'No valid KEY=VALUE pairs found' });
+    }
+
+    const rows = valid.map((v) => ({
+      environment_id: env.id,
+      key: v.key.trim(),
+      value_encrypted: encrypt(v.value),
+      is_secret: v.is_secret !== false,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { data, error } = await supabase
+      .from('env_variables')
+      .upsert(rows, { onConflict: 'environment_id,key' })
+      .select();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const valueByKey = Object.fromEntries(valid.map((v) => [v.key.trim(), v.value]));
+    const resultVariables = data.map((v) => ({
+      id: v.id,
+      key: v.key,
+      value: valueByKey[v.key],
+      is_secret: v.is_secret,
+      updated_at: v.updated_at,
+    }));
+
+    res.status(201).json({ variables: resultVariables });
+  }
+);
+
 module.exports = router;

@@ -42,32 +42,35 @@ export const api = {
     projects: {
       list: (companyId) => request(`/api/companies/${companyId}/projects`),
       create: (companyId, name) =>
-        request(`/api/companies/${companyId}/projects`, {
-          method: 'POST',
-          body: JSON.stringify({ name }),
-        }),
+      request(`/api/companies/${companyId}/projects`, { method: 'POST', body: JSON.stringify({ name }) }),
       get: (companyId, projectId) => request(`/api/companies/${companyId}/projects/${projectId}`),
-
+      
       createEnvironment: (companyId, projectId, name) =>
         request(`/api/companies/${companyId}/projects/${projectId}/environments`, {
-          method: 'POST',
-          body: JSON.stringify({ name }),
-        }),
-
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      }),
+      
       listVariables: (companyId, projectId, envId) =>
         request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables`),
-
-      upsertVariable: (companyId, projectId, envId, key, value) =>
+      
+      upsertVariable: (companyId, projectId, envId, key, value, isSecret = true) =>
         request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables`, {
-          method: 'POST',
-          body: JSON.stringify({ key, value }),
-        }),
-
+        method: 'POST',
+        body: JSON.stringify({ key, value, is_secret: isSecret }),
+      }),
+      
+      importVariables: (companyId, projectId, envId, variables) =>
+        request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ variables }),
+      }),
+      
       deleteVariable: (companyId, projectId, envId, varId) =>
         request(
-          `/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables/${varId}`,
-          { method: 'DELETE' }
-        ),
+        `/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables/${varId}`,
+        { method: 'DELETE' }
+      ),
     },
   },
 
