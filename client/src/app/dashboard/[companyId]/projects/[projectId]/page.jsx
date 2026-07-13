@@ -224,7 +224,7 @@ export default function ProjectDetailPage() {
     const existingKeys = new Set(variables.map(v => v.key));
     const duplicatesWithExisting = parsed.filter(v => existingKeys.has(v.key));
     if (duplicatesWithExisting.length > 0) {
-      setImportError(`Duplicate keys already exist: ${duplicatesWithExisting.map(v => v.key).join(', ')}. Delete them first.`);
+      setImportError(`Duplicate keys already exist. Delete them first.`);
       return;
     }
 
