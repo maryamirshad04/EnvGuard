@@ -44,9 +44,17 @@ export default function DashboardLayout({ children }) {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-ink">
-        <p className="font-mono text-sm text-mist">Verifying session</p>
-      </main>
+      <div className="min-h-screen bg-ink">
+        <div className="border-b border-line px-6 py-4">
+          <div className="mx-auto flex max-w-6xl items-center justify-between">
+            <div className="h-5 w-24 animate-pulse rounded-sm bg-line/60" />
+            <div className="h-7 w-7 animate-pulse rounded-full bg-line/60" />
+          </div>
+        </div>
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <div className="h-7 w-48 animate-pulse rounded-sm bg-line/60" />
+        </div>
+      </div>
     );
   }
 

@@ -6,18 +6,28 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
 import Modal from '@/components/Modal';
+import Spinner from '@/components/Spinner';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { companies, refreshCompanies } = useDashboard();
+
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const [editing, setEditing] = useState(null); // company object or null
+  const [editName, setEditName] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   async function handleCreate(e) {
     e.preventDefault();
     if (!newName.trim()) return;
     setError('');
+    setSubmitting(true);
     try {
       const { company } = await api.companies.create(newName.trim());
       await refreshCompanies();
@@ -26,6 +36,47 @@ export default function DashboardPage() {
       router.push(`/dashboard/${company.id}`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function openEdit(e, company) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditing(company);
+    setEditName(company.name);
+    setConfirmingDelete(false);
+    setEditError('');
+  }
+
+  async function handleRename(e) {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    setEditError('');
+    setEditSubmitting(true);
+    try {
+      await api.companies.update(editing.id, editName.trim());
+      await refreshCompanies();
+      setEditing(null);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    setEditError('');
+    setEditSubmitting(true);
+    try {
+      await api.companies.remove(editing.id);
+      await refreshCompanies();
+      setEditing(null);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setEditSubmitting(false);
     }
   }
 
@@ -33,7 +84,7 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-6xl px-6 py-12">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-paper">Your companies</h1>
+          <h1 className="text-2xl font-semibold text-paper">Your Teams</h1>
           <p className="mt-1 text-sm text-mist">
             Each workspace has its own team, projects, and encrypted variables.
           </p>
@@ -46,56 +97,128 @@ export default function DashboardPage() {
           }}
           className="rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90"
         >
-          + New company
+          + New Team
         </button>
       </div>
 
       {companies.length === 0 ? (
         <div className="mt-8 rounded-sm border border-dashed border-line p-10 text-center">
-          <p className="font-mono text-sm text-mist">No companies yet.</p>
+          <p className="font-mono text-sm text-mist">No Team yet.</p>
         </div>
       ) : (
         <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {companies.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/dashboard/${c.id}`}
-                className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="font-mono text-xs uppercase tracking-wider text-signal">Company</p>
-                  <span
-                    className={`rounded-sm px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
-                      c.role === 'admin' ? 'bg-signal/15 text-signal' : 'border border-line text-mist'
-                    }`}
-                  >
-                    {c.role}
-                  </span>
-                </div>
-                <h3 className="mt-2 text-lg font-medium text-paper">{c.name}</h3>
-                <p className="mt-1 text-xs text-mist">
-                  Created {new Date(c.created_at).toLocaleDateString()}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
+  {companies.map((c) => (
+    <li key={c.id} className="relative">
+      <Link
+        href={`/dashboard/${c.id}`}
+        className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
+      >
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-xs uppercase tracking-wider text-signal">Team</p>
+          <span
+            className={`rounded-sm px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
+              c.role === 'admin' ? 'bg-signal/15 text-signal' : 'border border-line text-mist'
+            }`}
+          >
+            {c.role}
+          </span>
+        </div>
+        
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <h3 className="truncate text-lg font-medium text-paper">{c.name}</h3>
+          {c.role === 'admin' && (
+            <button
+              onClick={(e) => openEdit(e, c)}
+              aria-label={`Edit ${c.name}`}
+              className="flex-shrink-0 text-mist hover:text-paper"
+            >
+              &#9998;
+            </button>
+          )}
+        </div>
+        
+        <p className="mt-1 text-xs text-mist">
+          Created {new Date(c.created_at).toLocaleDateString()}
+        </p>
+      </Link>
+    </li>
+  ))}
+</ul>
       )}
 
       <Modal open={creating} onClose={() => setCreating(false)} title="New company">
-        <form onSubmit={handleCreate} className="space-y-3">
+        <form onSubmit={handleCreate} className="space-y-3" autoComplete="off">
           <input
             autoFocus
+            autoComplete="off"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Company name"
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
           {error && <p className="text-sm text-alert">{error}</p>}
-          <button className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-            Create
+          <button
+            disabled={submitting}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {submitting && <Spinner className="h-4 w-4" />}
+            {submitting ? 'Creating\u2026' : 'Create'}
           </button>
         </form>
+      </Modal>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Team">
+        <form onSubmit={handleRename} className="space-y-3" autoComplete="off">
+          <input
+            autoFocus
+            autoComplete="off"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+          />
+          {editError && <p className="text-sm text-alert">{editError}</p>}
+          <button
+            disabled={editSubmitting}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {editSubmitting && <Spinner className="h-4 w-4" />}
+            Save name
+          </button>
+        </form>
+
+        <div className="mt-6 border-t border-line pt-4">
+          {confirmingDelete ? (
+            <div className="space-y-2">
+              <p className="text-sm text-alert">
+                Delete &ldquo;{editing?.name}&rdquo; permanently, including all its projects,
+                environments, and variables? This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDelete}
+                  disabled={editSubmitting}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-alert px-4 py-2 text-sm font-medium text-ink hover:bg-alert/90 disabled:opacity-60"
+                >
+                  {editSubmitting && <Spinner className="h-4 w-4" />}
+                  Yes, delete
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  className="flex-1 rounded-sm border border-line px-4 py-2 text-sm text-mist hover:text-paper"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              className="text-sm text-alert hover:underline"
+            >
+              Delete this team
+            </button>
+          )}
+        </div>
       </Modal>
     </div>
   );

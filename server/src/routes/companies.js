@@ -58,6 +58,29 @@ router.get('/:companyId', requireMember, async (req, res) => {
   res.json({ company: { ...company, role: req.membership.role } });
 });
 
+router.patch('/:companyId', requireMember, requireAdmin, async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Company name is required' });
+
+  const { data, error } = await supabase
+    .from('companies')
+    .update({ name: name.trim() })
+    .eq('id', req.params.companyId)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ company: { ...data, role: req.membership.role } });
+});
+
+router.delete('/:companyId', requireMember, requireAdmin, async (req, res) => {
+  // Cascades to company_members, invites, projects, environments, and
+  // env_variables via the ON DELETE CASCADE foreign keys already in the schema.
+  const { error } = await supabase.from('companies').delete().eq('id', req.params.companyId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
 // --- members ---------------------------------------------------------------
 
 router.get('/:companyId/members', requireMember, async (req, res) => {
@@ -213,6 +236,34 @@ router.get('/:companyId/projects/:projectId', requireMember, async (req, res) =>
   res.json({ project, environments });
 });
 
+router.patch('/:companyId/projects/:projectId', requireMember, async (req, res) => {
+  const project = await getCompanyProject(req.params.companyId, req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Project name is required' });
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update({ name: name.trim() })
+    .eq('id', project.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ project: data });
+});
+
+router.delete('/:companyId/projects/:projectId', requireMember, async (req, res) => {
+  const project = await getCompanyProject(req.params.companyId, req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  // Cascades to environments and env_variables via ON DELETE CASCADE.
+  const { error } = await supabase.from('projects').delete().eq('id', project.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
 router.post('/:companyId/projects/:projectId/environments', requireMember, async (req, res) => {
   const project = await getCompanyProject(req.params.companyId, req.params.projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -249,79 +300,6 @@ async function getCompanyEnvironment(companyId, projectId, envId) {
   if (error || !data) return null;
   return data;
 }
-
-router.get(
-  '/:companyId/projects/:projectId/environments/:envId/variables',
-  requireMember,
-  async (req, res) => {
-    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
-    if (!env) return res.status(404).json({ error: 'Environment not found' });
-
-    const { data, error } = await supabase
-      .from('env_variables')
-      .select('*')
-      .eq('environment_id', env.id)
-      .order('key', { ascending: true });
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    const variables = data.map((v) => ({
-      id: v.id,
-      key: v.key,
-      value: decrypt(v.value_encrypted),
-      updated_at: v.updated_at,
-    }));
-
-    res.json({ variables });
-  }
-);
-
-router.post(
-  '/:companyId/projects/:projectId/environments/:envId/variables',
-  requireMember,
-  async (req, res) => {
-    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
-    if (!env) return res.status(404).json({ error: 'Environment not found' });
-
-    const { key, value } = req.body;
-    if (!key?.trim() || value === undefined || value === '') {
-      return res.status(400).json({ error: 'Both key and value are required' });
-    }
-
-    const value_encrypted = encrypt(value);
-
-    const { data, error } = await supabase
-      .from('env_variables')
-      .upsert(
-        { environment_id: env.id, key: key.trim(), value_encrypted, updated_at: new Date().toISOString() },
-        { onConflict: 'environment_id,key' }
-      )
-      .select()
-      .single();
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    res.status(201).json({ variable: { id: data.id, key: data.key, value, updated_at: data.updated_at } });
-  }
-);
-
-router.delete(
-  '/:companyId/projects/:projectId/environments/:envId/variables/:varId',
-  requireMember,
-  async (req, res) => {
-    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
-    if (!env) return res.status(404).json({ error: 'Environment not found' });
-
-    const { error } = await supabase
-      .from('env_variables')
-      .delete()
-      .eq('id', req.params.varId)
-      .eq('environment_id', env.id);
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(204).send();
-  }
-);
 
 router.get(
   '/:companyId/projects/:projectId/environments/:envId/variables',
@@ -384,6 +362,24 @@ router.post(
     res.status(201).json({
       variable: { id: data.id, key: data.key, value, is_secret: data.is_secret, updated_at: data.updated_at },
     });
+  }
+);
+
+router.delete(
+  '/:companyId/projects/:projectId/environments/:envId/variables/:varId',
+  requireMember,
+  async (req, res) => {
+    const env = await getCompanyEnvironment(req.params.companyId, req.params.projectId, req.params.envId);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+
+    const { error } = await supabase
+      .from('env_variables')
+      .delete()
+      .eq('id', req.params.varId)
+      .eq('environment_id', env.id);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(204).send();
   }
 );
 

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
 import Modal from './Modal';
+import Spinner from './Spinner';
 
 function Chevron() {
   return (
@@ -17,35 +18,23 @@ function Chevron() {
 
 export default function DashboardNavbar() {
   const router = useRouter();
-  const { companyId, projectId } = useParams();
+  const { companyId } = useParams();
   const { user, companies, refreshCompanies, logout } = useDashboard();
 
   const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
-  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
-  const [projects, setProjects] = useState([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [creatingCompany, setCreatingCompany] = useState(false);
-  const [creatingProject, setCreatingProject] = useState(false);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const activeCompany = companies.find((c) => c.id === companyId);
-  const activeProject = projects.find((p) => p.id === projectId);
-
-  useEffect(() => {
-    if (!companyId) {
-      setProjects([]);
-      return;
-    }
-    api.companies.projects
-      .list(companyId)
-      .then((res) => setProjects(res.projects || []))
-      .catch(() => setProjects([]));
-  }, [companyId]);
 
   async function handleCreateCompany(e) {
     e.preventDefault();
     if (!newName.trim()) return;
     setError('');
+    setSubmitting(true);
     try {
       const { company } = await api.companies.create(newName.trim());
       await refreshCompanies();
@@ -54,21 +43,8 @@ export default function DashboardNavbar() {
       router.push(`/dashboard/${company.id}`);
     } catch (err) {
       setError(err.message);
-    }
-  }
-
-  async function handleCreateProject(e) {
-    e.preventDefault();
-    if (!newName.trim() || !companyId) return;
-    setError('');
-    try {
-      const { project } = await api.companies.projects.create(companyId, newName.trim());
-      setProjects((prev) => [project, ...prev]);
-      setCreatingProject(false);
-      setNewName('');
-      router.push(`/dashboard/${companyId}/projects/${project.id}`);
-    } catch (err) {
-      setError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -93,9 +69,9 @@ export default function DashboardNavbar() {
             <div className="relative">
               <button
                 onClick={() => setCompanyMenuOpen((v) => !v)}
-                className="flex max-w-[130px] items-center gap-1.5 rounded-sm border border-line px-2.5 py-1.5 text-xs text-paper hover:border-signal/40 sm:max-w-[180px] sm:px-3 sm:text-sm"
+                className="flex max-w-[160px] items-center gap-1.5 rounded-sm border border-line px-2.5 py-1.5 text-xs text-paper hover:border-signal/40 sm:max-w-[220px] sm:px-3 sm:text-sm"
               >
-                <span className="truncate">{activeCompany?.name || 'Companies'}</span>
+                <span className="truncate">{activeCompany?.name || 'Teams'}</span>
                 <Chevron />
               </button>
               {companyMenuOpen && (
@@ -124,109 +100,64 @@ export default function DashboardNavbar() {
                       }}
                       className="block w-full border-t border-line px-3 py-2 text-left text-sm text-mist hover:bg-ink hover:text-paper"
                     >
-                      + New company
+                      + New Team
                     </button>
                   </div>
                 </>
               )}
             </div>
-
-            {/* Project switcher */}
-            {companyId && (
-              <div className="relative">
-                <button
-                  onClick={() => setProjectMenuOpen((v) => !v)}
-                  className="flex max-w-[130px] items-center gap-1.5 rounded-sm border border-line px-2.5 py-1.5 text-xs text-paper hover:border-signal/40 sm:max-w-[180px] sm:px-3 sm:text-sm"
-                >
-                  <span className="truncate">{activeProject?.name || 'Projects'}</span>
-                  <Chevron />
-                </button>
-                {projectMenuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setProjectMenuOpen(false)} />
-                    <div className="absolute left-0 z-20 mt-2 w-56 rounded-sm border border-line bg-surface py-1 shadow-lg">
-                      {projects.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-mist">No projects yet</p>
-                      )}
-                      {projects.map((p) => (
-                        <Link
-                          key={p.id}
-                          href={`/dashboard/${companyId}/projects/${p.id}`}
-                          onClick={() => setProjectMenuOpen(false)}
-                          className={`block truncate px-3 py-2 text-sm hover:bg-ink ${
-                            p.id === projectId ? 'text-signal' : 'text-paper'
-                          }`}
-                        >
-                          {p.name}
-                        </Link>
-                      ))}
-                      <button
-                        onClick={() => {
-                          setProjectMenuOpen(false);
-                          setError('');
-                          setNewName('');
-                          setCreatingProject(true);
-                        }}
-                        className="block w-full border-t border-line px-3 py-2 text-left text-sm text-mist hover:bg-ink hover:text-paper"
-                      >
-                        + New project
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* Right: user + logout */}
-          <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-4">
-            <span className="hidden max-w-[160px] truncate text-sm text-mist sm:inline">
-              {user?.email?.split('@')[0]}
-            </span>
-            <span
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line font-mono text-xs text-mist sm:hidden"
-              title={user?.email}
-            >
-              {user?.email?.[0]?.toUpperCase()}
-            </span>
+          {/* Right: user dropdown */}
+          <div className="relative shrink-0 self-end sm:self-auto">
             <button
-              onClick={logout}
-              className="shrink-0 rounded-sm border border-line px-2.5 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper sm:px-3 sm:text-sm"
+              onClick={() => setUserMenuOpen((v) => !v)}
+              className="flex items-center gap-2 rounded-sm border border-line px-2.5 py-1.5 hover:border-signal/40"
             >
-              Log out
+              <span
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line font-mono text-[11px] text-mist"
+              >
+                {user?.email?.[0]?.toUpperCase()}
+              </span>
+              <Chevron />
             </button>
+            {userMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
+                <div className="absolute right-0 z-20 mt-2 w-64 rounded-sm border border-line bg-surface py-1 shadow-lg">
+                  <p className="truncate border-b border-line px-3 py-2 text-sm text-paper">
+                    {user?.email}
+                  </p>
+                  <button
+                    onClick={logout}
+                    className="block w-full px-3 py-2 text-left text-sm text-mist hover:bg-ink hover:text-paper"
+                  >
+                    Log out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      <Modal open={creatingCompany} onClose={() => setCreatingCompany(false)} title="New company">
-        <form onSubmit={handleCreateCompany} className="space-y-3">
+      <Modal open={creatingCompany} onClose={() => setCreatingCompany(false)} title="New Team">
+        <form onSubmit={handleCreateCompany} className="space-y-3" autoComplete="off">
           <input
             autoFocus
+            autoComplete="off"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Company name"
+            placeholder="Team name"
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
           {error && <p className="text-sm text-alert">{error}</p>}
-          <button className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-            Create
-          </button>
-        </form>
-      </Modal>
-
-      <Modal open={creatingProject} onClose={() => setCreatingProject(false)} title="New project">
-        <form onSubmit={handleCreateProject} className="space-y-3">
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Project name"
-            className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
-          />
-          {error && <p className="text-sm text-alert">{error}</p>}
-          <button className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-            Create
+          <button
+            disabled={submitting}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {submitting && <Spinner className="h-4 w-4" />}
+            {submitting ? 'Creating' : 'Create'}
           </button>
         </form>
       </Modal>

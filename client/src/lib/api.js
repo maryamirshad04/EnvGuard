@@ -26,6 +26,8 @@ export const api = {
     list: () => request('/api/companies'),
     create: (name) => request('/api/companies', { method: 'POST', body: JSON.stringify({ name }) }),
     get: (companyId) => request(`/api/companies/${companyId}`),
+    update: (companyId, name) => request(`/api/companies/${companyId}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    remove: (companyId) => request(`/api/companies/${companyId}`, { method: 'DELETE' }),
     members: (companyId) => request(`/api/companies/${companyId}/members`),
 
     invites: {
@@ -44,6 +46,8 @@ export const api = {
       create: (companyId, name) =>
       request(`/api/companies/${companyId}/projects`, { method: 'POST', body: JSON.stringify({ name }) }),
       get: (companyId, projectId) => request(`/api/companies/${companyId}/projects/${projectId}`),
+      update: (companyId, projectId, name) => request(`/api/companies/${companyId}/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify({ name }),}),
+      remove: (companyId, projectId) => request(`/api/companies/${companyId}/projects/${projectId}`, { method: 'DELETE' }),
       
       createEnvironment: (companyId, projectId, name) =>
         request(`/api/companies/${companyId}/projects/${projectId}/environments`, {

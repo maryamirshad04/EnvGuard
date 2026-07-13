@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import Modal from '@/components/Modal';
+import Spinner from '@/components/Spinner';
+import { ProjectSkeleton } from '@/components/Skeleton';
 
 const ENV_COLORS = {
   development: 'bg-sky-400',
@@ -45,7 +47,7 @@ function csvEscape(value) {
 
 function toCsvFormat(variables) {
   const header = 'key,value,protected';
-  const rows = variables.map((v) => `${csvEscape(v.key)},${csvEscape(v.value)},${v.is_secret}`);
+  const rows = variables.map((v) => `${csvEscape(v.key)},${csvEscape(v.value)},${v.is_secret !== false}`);
   return [header, ...rows].join('\n');
 }
 
@@ -64,6 +66,7 @@ export default function ProjectDetailPage() {
   const router = useRouter();
 
   const [project, setProject] = useState(null);
+  const [companyName, setCompanyName] = useState('');
   const [environments, setEnvironments] = useState([]);
   const [activeEnvId, setActiveEnvId] = useState(null);
   const [variables, setVariables] = useState([]);
@@ -74,15 +77,20 @@ export default function ProjectDetailPage() {
 
   const [addEnvOpen, setAddEnvOpen] = useState(false);
   const [newEnvName, setNewEnvName] = useState('');
+  const [addEnvSubmitting, setAddEnvSubmitting] = useState(false);
 
   const [addVarOpen, setAddVarOpen] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [newIsSecret, setNewIsSecret] = useState(true);
+  const [addVarSubmitting, setAddVarSubmitting] = useState(false);
+  const [addVarError, setAddVarError] = useState('');
 
-  const [importIsSecret, setImportIsSecret] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importIsSecret, setImportIsSecret] = useState(true);
+  const [importSubmitting, setImportSubmitting] = useState(false);
+  const [importError, setImportError] = useState('');
 
   const [revealed, setRevealed] = useState({});
   const [copiedId, setCopiedId] = useState(null);
@@ -109,11 +117,15 @@ export default function ProjectDetailPage() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await api.companies.projects.get(companyId, projectId);
+        const [projectRes, companyRes] = await Promise.all([
+          api.companies.projects.get(companyId, projectId),
+          api.companies.get(companyId),
+        ]);
         if (cancelled) return;
-        setProject(res.project);
-        setEnvironments(res.environments || []);
-        const first = res.environments?.[0];
+        setProject(projectRes.project);
+        setCompanyName(companyRes.company?.name || '');
+        setEnvironments(projectRes.environments || []);
+        const first = projectRes.environments?.[0];
         if (first) {
           setActiveEnvId(first.id);
           await loadVariables(first.id);
@@ -128,6 +140,7 @@ export default function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, projectId]);
 
   async function handleSwitchEnv(envId) {
@@ -141,6 +154,7 @@ export default function ProjectDetailPage() {
     e.preventDefault();
     if (!newEnvName.trim()) return;
     setError('');
+    setAddEnvSubmitting(true);
     try {
       const { environment } = await api.companies.projects.createEnvironment(
         companyId,
@@ -153,60 +167,74 @@ export default function ProjectDetailPage() {
       await handleSwitchEnv(environment.id);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setAddEnvSubmitting(false);
     }
   }
 
   async function handleAddVariable(e) {
     e.preventDefault();
-    if (!newKey.trim() || !newValue) return;
-    setError('');
+    const trimmedKey = newKey.trim();
+    if (!trimmedKey || !newValue) return;
+
+    // Duplicate check against what's already loaded for this environment
+    if (variables.some((v) => v.key === trimmedKey)) {
+      setAddVarError(`"${trimmedKey}" already exists in ${activeEnv?.name || 'this environment'}. Delete it first, or use a different key.`);
+      return;
+    }
+
+    setAddVarError('');
+    setAddVarSubmitting(true);
     try {
       const { variable } = await api.companies.projects.upsertVariable(
         companyId,
         projectId,
         activeEnvId,
-        newKey.trim(),
+        trimmedKey,
         newValue,
         newIsSecret
       );
-      setVariables((prev) => {
-        const withoutOld = prev.filter((v) => v.key !== variable.key);
-        return [...withoutOld, variable].sort((a, b) => a.key.localeCompare(b.key));
-      });
+      setVariables((prev) => [...prev, variable].sort((a, b) => a.key.localeCompare(b.key)));
       setNewKey('');
       setNewValue('');
       setNewIsSecret(true);
       setAddVarOpen(false);
     } catch (err) {
-      setError(err.message);
+      setAddVarError(err.message);
+    } finally {
+      setAddVarSubmitting(false);
     }
   }
 
   async function handleImport(e) {
-  e.preventDefault();
-  const parsed = parseEnvText(importText).map((v) => ({ ...v, is_secret: importIsSecret }));
-  if (parsed.length === 0) {
-    setError('No KEY=VALUE lines found to import');
-    return;
+    e.preventDefault();
+    const parsed = parseEnvText(importText).map((v) => ({ ...v, is_secret: importIsSecret }));
+    if (parsed.length === 0) {
+      setImportError('No KEY=VALUE lines found to import');
+      return;
+    }
+    setImportError('');
+    setImportSubmitting(true);
+    try {
+      const res = await api.companies.projects.importVariables(companyId, projectId, activeEnvId, parsed);
+      const imported = res.variables || [];
+      setVariables((prev) => {
+        const importedKeys = new Set(imported.map((v) => v.key));
+        const kept = prev.filter((v) => !importedKeys.has(v.key));
+        return [...kept, ...imported].sort((a, b) => a.key.localeCompare(b.key));
+      });
+      setNotice(`Imported ${imported.length} variable${imported.length === 1 ? '' : 's'}`);
+      setTimeout(() => setNotice(''), 3000);
+      setImportText('');
+      setImportIsSecret(true);
+      setImportOpen(false);
+    } catch (err) {
+      setImportError(err.message);
+    } finally {
+      setImportSubmitting(false);
+    }
   }
-  setError('');
-  try {
-    const res = await api.companies.projects.importVariables(companyId, projectId, activeEnvId, parsed);
-    const imported = res.variables || [];
-    setVariables((prev) => {
-      const importedKeys = new Set(imported.map((v) => v.key));
-      const kept = prev.filter((v) => !importedKeys.has(v.key));
-      return [...kept, ...imported].sort((a, b) => a.key.localeCompare(b.key));
-    });
-    setNotice(`Imported ${imported.length} variable${imported.length === 1 ? '' : 's'}`);
-    setTimeout(() => setNotice(''), 3000);
-    setImportText('');
-    setImportIsSecret(true);
-    setImportOpen(false);
-  } catch (err) {
-    setError(err.message);
-  }
-}
+
   function handleFileSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -250,8 +278,8 @@ export default function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="font-mono text-sm text-mist">Loading project</p>
+      <div className="mx-auto max-w-4xl px-6 py-12">
+        <ProjectSkeleton />
       </div>
     );
   }
@@ -259,7 +287,7 @@ export default function ProjectDetailPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       <Link href={`/dashboard/${companyId}`} className="text-sm text-mist hover:text-paper">
-        &larr; Back to company
+        &larr; {companyName || 'Back to company'}
       </Link>
 
       <p className="mt-4 font-mono text-xs uppercase tracking-wider text-signal">Project</p>
@@ -284,7 +312,11 @@ export default function ProjectDetailPage() {
           </button>
         ))}
         <button
-          onClick={() => setAddEnvOpen(true)}
+          onClick={() => {
+            setError('');
+            setNewEnvName('');
+            setAddEnvOpen(true);
+          }}
           className="rounded-sm border border-dashed border-line p-3 text-left text-xs text-mist hover:border-signal/40 hover:text-paper"
         >
           + environment
@@ -297,13 +329,19 @@ export default function ProjectDetailPage() {
       {/* Toolbar */}
       <div className="mt-6 flex flex-wrap gap-2">
         <button
-          onClick={() => setAddVarOpen(true)}
+          onClick={() => {
+            setAddVarError('');
+            setAddVarOpen(true);
+          }}
           className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90"
         >
           + Add variable
         </button>
         <button
-          onClick={() => setImportOpen(true)}
+          onClick={() => {
+            setImportError('');
+            setImportOpen(true);
+          }}
           className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
         >
           Import .env
@@ -334,84 +372,98 @@ export default function ProjectDetailPage() {
       {/* Variables list */}
       <div className="mt-4">
         {varsLoading ? (
-          <p className="font-mono text-sm text-mist">Loading variables</p>
+          <div className="space-y-px overflow-hidden rounded-sm border border-line">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-16 animate-pulse bg-line/40" />
+            ))}
+          </div>
         ) : variables.length === 0 ? (
           <div className="rounded-sm border border-dashed border-line p-10 text-center">
             <p className="font-mono text-sm text-mist">No variables in this environment yet.</p>
           </div>
         ) : (
           <ul className="divide-y divide-line rounded-sm border border-line bg-surface">
-            {variables.map((v) => (
-              <li
-                key={v.id}
-                className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-mono text-sm text-paper">{v.key}</p>
-                    <span
-                      className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
-                        v.is_secret ? 'border border-line text-mist' : 'bg-signal/15 text-signal'
-                      }`}
-                    >
-                      {v.is_secret ? 'protected' : 'plain'}
-                    </span>
+            {variables.map((v) => {
+              const isSecret = v.is_secret !== false; // treat missing/undefined as protected
+              return (
+                <li
+                  key={v.id}
+                  className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-sm text-paper">{v.key}</p>
+                      <span
+                        className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
+                          isSecret ? 'border border-line text-mist' : 'bg-signal/15 text-signal'
+                        }`}
+                      >
+                        {isSecret ? 'protected' : 'plain'}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate font-mono text-sm text-mist">
+                      {!isSecret || revealed[v.id] ? v.value : '\u2022'.repeat(Math.min(v.value.length, 24))}
+                    </p>
                   </div>
-                  <p className="mt-1 truncate font-mono text-sm text-mist">
-                    {!v.is_secret || revealed[v.id] ? v.value : '\u2022'.repeat(Math.min(v.value.length, 24))}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {v.is_secret && (
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isSecret && (
+                      <button
+                        onClick={() => toggleReveal(v.id)}
+                        className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
+                      >
+                        {revealed[v.id] ? 'Hide' : 'Reveal'}
+                      </button>
+                    )}
                     <button
-                      onClick={() => toggleReveal(v.id)}
+                      onClick={() => handleCopy(v.id, v.value)}
                       className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
                     >
-                      {revealed[v.id] ? 'Hide' : 'Reveal'}
+                      {copiedId === v.id ? 'Copied' : 'Copy'}
                     </button>
-                  )}
-                  <button
-                    onClick={() => handleCopy(v.id, v.value)}
-                    className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
-                  >
-                    {copiedId === v.id ? 'Copied' : 'Copy'}
-                  </button>
-                  <button
-                    onClick={() => handleDeleteVariable(v.id)}
-                    className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
+                    <button
+                      onClick={() => handleDeleteVariable(v.id)}
+                      className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
 
       {/* Add environment modal */}
       <Modal open={addEnvOpen} onClose={() => setAddEnvOpen(false)} title="New environment">
-        <form onSubmit={handleAddEnvironment} className="space-y-3">
+        <form onSubmit={handleAddEnvironment} className="space-y-3" autoComplete="off">
           <input
             autoFocus
+            autoComplete="off"
             value={newEnvName}
             onChange={(e) => setNewEnvName(e.target.value)}
             placeholder="e.g. qa"
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
-          <button className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-            Create
+          <button
+            disabled={addEnvSubmitting}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {addEnvSubmitting && <Spinner className="h-4 w-4" />}
+            {addEnvSubmitting ? 'Creating\u2026' : 'Create'}
           </button>
         </form>
       </Modal>
 
       {/* Add variable modal */}
       <Modal open={addVarOpen} onClose={() => setAddVarOpen(false)} title="Add variable">
-        <form onSubmit={handleAddVariable} className="space-y-3">
+        <form onSubmit={handleAddVariable} className="space-y-3" autoComplete="off">
+          {addVarError && <p className="text-sm text-alert">{addVarError}</p>}
           <div>
             <label className="mb-1 block text-xs text-mist">Key</label>
             <input
               autoFocus
+              autoComplete="off"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               placeholder="DATABASE_URL"
@@ -421,10 +473,14 @@ export default function ProjectDetailPage() {
           <div>
             <label className="mb-1 block text-xs text-mist">Value</label>
             <input
-              type="password"
+              type="text"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
               placeholder="postgres://..."
+              style={{ WebkitTextSecurity: 'disc' }}
               className="w-full rounded-sm border border-line bg-ink px-3 py-2 font-mono text-sm text-paper outline-none focus:border-signal"
             />
           </div>
@@ -437,15 +493,20 @@ export default function ProjectDetailPage() {
             />
             Protected (masked by default, click to reveal)
           </label>
-          <button className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-            Add variable
+          <button
+            disabled={addVarSubmitting}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {addVarSubmitting && <Spinner className="h-4 w-4" />}
+            {addVarSubmitting ? 'Adding\u2026' : 'Add variable'}
           </button>
         </form>
       </Modal>
 
       {/* Bulk import modal */}
       <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import .env">
-        <form onSubmit={handleImport} className="space-y-3">
+        <form onSubmit={handleImport} className="space-y-3" autoComplete="off">
+          {importError && <p className="text-sm text-alert">{importError}</p>}
           <div>
             <label className="mb-1 block text-xs text-mist">Upload a file (optional)</label>
             <input
@@ -455,28 +516,30 @@ export default function ProjectDetailPage() {
               className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-xs text-mist file:mr-3 file:rounded-sm file:border-0 file:bg-signal file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink"
             />
           </div>
-          <p className="text-xs text-mist">
-  Or paste KEY=VALUE lines below.
-</p>
-<textarea
-  value={importText}
-  onChange={(e) => setImportText(e.target.value)}
-  rows={8}
-  placeholder={'DATABASE_URL=postgres://...\nAPI_KEY=sk-...'}
-  className="w-full rounded-sm border border-line bg-ink px-3 py-2 font-mono text-xs text-paper outline-none focus:border-signal"
-/>
-<label className="flex items-center gap-2 text-xs text-mist">
-  <input
-    type="checkbox"
-    checked={importIsSecret}
-    onChange={(e) => setImportIsSecret(e.target.checked)}
-    className="accent-signal"
-  />
-  Protect all imported values (masked by default, click to reveal)
-</label>
-<button className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90">
-  Import
-</button>
+          <p className="text-xs text-mist">Or paste KEY=VALUE lines below.</p>
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={8}
+            placeholder={'DATABASE_URL=postgres://...\nAPI_KEY=sk-...'}
+            className="w-full rounded-sm border border-line bg-ink px-3 py-2 font-mono text-xs text-paper outline-none focus:border-signal"
+          />
+          <label className="flex items-center gap-2 text-xs text-mist">
+            <input
+              type="checkbox"
+              checked={importIsSecret}
+              onChange={(e) => setImportIsSecret(e.target.checked)}
+              className="accent-signal"
+            />
+            Protect all imported values (masked by default, click to reveal)
+          </label>
+          <button
+            disabled={importSubmitting}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {importSubmitting && <Spinner className="h-4 w-4" />}
+            {importSubmitting ? 'Importing' : 'Import'}
+          </button>
         </form>
       </Modal>
     </div>
