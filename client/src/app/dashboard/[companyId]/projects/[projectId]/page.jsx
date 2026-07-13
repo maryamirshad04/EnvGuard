@@ -179,7 +179,7 @@ export default function ProjectDetailPage() {
 
     // Duplicate check against what's already loaded for this environment
     if (variables.some((v) => v.key === trimmedKey)) {
-      setAddVarError(`"${trimmedKey}" already exists in ${activeEnv?.name || 'this environment'}. Delete it first, or use a different key.`);
+      setAddVarError(`"${trimmedKey}" already exists in ${activeEnv?.name || 'this environment'}. Delete it first.`);
       return;
     }
 
@@ -213,6 +213,21 @@ export default function ProjectDetailPage() {
       setImportError('No KEY=VALUE lines found to import');
       return;
     }
+
+    const keys = parsed.map(v => v.key);
+    const duplicatesWithin = keys.filter((key, index) => keys.indexOf(key) !== index);
+    if (duplicatesWithin.length > 0) {
+      setImportError(`Duplicate keys found in import: ${[...new Set(duplicatesWithin)].join(', ')}`);
+      return;
+    }
+
+    const existingKeys = new Set(variables.map(v => v.key));
+    const duplicatesWithExisting = parsed.filter(v => existingKeys.has(v.key));
+    if (duplicatesWithExisting.length > 0) {
+      setImportError(`Duplicate keys already exist: ${duplicatesWithExisting.map(v => v.key).join(', ')}. Delete them first.`);
+      return;
+    }
+
     setImportError('');
     setImportSubmitting(true);
     try {
