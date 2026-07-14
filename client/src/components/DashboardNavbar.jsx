@@ -57,12 +57,12 @@ export default function DashboardNavbar() {
               href="/dashboard"
               className="flex shrink-0 items-center gap-2 font-mono text-sm text-signal"
             >
-              <img 
-    src="/lock.svg" 
-    alt="Envguard icon" 
-    className="inline-block h-5 w-5 text-signal align-middle" 
-  /> 
-  <span className="align-middle">envguard</span>
+              <img
+                src="/lock.svg"
+                alt="Envguard icon"
+                className="inline-block h-5 w-5 text-signal align-middle"
+              />
+              <span className="align-middle">envguard</span>
             </Link>
 
             {/* Company switcher */}
@@ -114,9 +114,7 @@ export default function DashboardNavbar() {
               onClick={() => setUserMenuOpen((v) => !v)}
               className="flex items-center gap-2 rounded-sm border border-line px-2.5 py-1.5 hover:border-signal/40"
             >
-              <span
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line font-mono text-[11px] text-mist"
-              >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line font-mono text-[11px] text-mist">
                 {user?.email?.[0]?.toUpperCase()}
               </span>
               <Chevron />
@@ -128,9 +126,16 @@ export default function DashboardNavbar() {
                   <p className="truncate border-b border-line px-3 py-2 text-sm text-paper">
                     {user?.email}
                   </p>
+                  <Link
+                    href="/dashboard/settings"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block w-full px-3 py-2 text-left text-sm text-mist hover:bg-ink hover:text-paper"
+                  >
+                    Settings
+                  </Link>
                   <button
                     onClick={logout}
-                    className="block w-full px-3 py-2 text-left text-sm text-mist hover:bg-ink hover:text-paper"
+                    className="block w-full border-t border-line px-3 py-2 text-left text-sm text-mist hover:bg-ink hover:text-paper"
                   >
                     Log out
                   </button>

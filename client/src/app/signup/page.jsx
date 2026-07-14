@@ -25,24 +25,24 @@ function SignupForm() {
   const redirect = searchParams.get('redirect') || '/dashboard';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [enable2fa, setEnable2fa] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   function validateEmail(email) {
-
     if (!email.includes('@')) {
       return 'Email must contain @ symbol';
     }
-    
+
     const parts = email.split('@');
     if (parts.length !== 2) {
       return 'Invalid email format';
     }
-    
+
     if (parts[0].length === 0 || parts[1].length === 0) {
       return 'Email must have content before and after @';
     }
-    
+
     return null;
   }
 
@@ -60,7 +60,9 @@ function SignupForm() {
 
     try {
       await api.signup(email, password);
-      router.push(redirect);
+      // If they opted in, send them to Settings to scan the QR code and
+      // finish setup right away, instead of duplicating that flow here.
+      router.push(enable2fa ? '/dashboard/settings?setup2fa=1' : redirect);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -72,12 +74,12 @@ function SignupForm() {
     <main className="flex min-h-screen items-center justify-center bg-ink px-6">
       <div className="w-full max-w-sm rounded-sm border border-line bg-surface p-8">
         <Link href="/" className="font-mono text-sm text-signal">
-          <img 
-    src="/lock.svg" 
-    alt="Envguard icon" 
-    className="inline-block h-5 w-5 text-signal align-middle" 
-  /> 
-  <span className="align-middle">envguard</span>
+          <img
+            src="/lock.svg"
+            alt="Envguard icon"
+            className="inline-block h-5 w-5 text-signal align-middle"
+          />{' '}
+          <span className="align-middle">envguard</span>
         </Link>
         <h1 className="mt-6 text-2xl font-semibold text-paper">Create your account</h1>
         <p className="mt-1 text-sm text-mist">Encrypt your first secret in under a minute.</p>
@@ -112,6 +114,19 @@ function SignupForm() {
               placeholder="At least 8 characters"
             />
           </div>
+
+          <label className="flex items-start gap-2 text-sm text-mist">
+            <input
+              type="checkbox"
+              checked={enable2fa}
+              onChange={(e) => setEnable2fa(e.target.checked)}
+              className="mt-0.5 accent-signal"
+            />
+            <span>
+              Enable two-factor authentication (recommended) — you&apos;ll scan a QR code with
+              Google Authenticator, Authy, or a similar app right after signing up.
+            </span>
+          </label>
 
           {error && <p className="text-sm text-alert">{error}</p>}
 
