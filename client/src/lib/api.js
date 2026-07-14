@@ -82,4 +82,14 @@ export const api = {
     get: (token) => request(`/api/invites/${token}`),
     accept: (token) => request(`/api/invites/${token}/accept`, { method: 'POST' }),
   },
+
+  share: {
+    create: (companyId, projectId, environmentId) =>
+      request('/api/share', {
+        method: 'POST',
+        body: JSON.stringify({ companyId, projectId, environmentId }),
+      }),
+    get: (token) => request(`/api/share/${token}`),
+  },
+  
 };

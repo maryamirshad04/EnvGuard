@@ -2,8 +2,6 @@ export function Skeleton({ className = '' }) {
   return <div className={`animate-pulse rounded-sm bg-line/60 ${className}`} />;
 }
 
-// Matches the shape of a company/project card grid, shown while the real
-// list is loading so the page never looks "stuck".
 export function CardGridSkeleton({ count = 3 }) {
   return (
     <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -18,7 +16,6 @@ export function CardGridSkeleton({ count = 3 }) {
   );
 }
 
-// Matches the environment cards + variable list on the project page.
 export function ProjectSkeleton() {
   return (
     <div>

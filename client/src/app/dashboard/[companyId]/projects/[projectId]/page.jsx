@@ -95,6 +95,12 @@ export default function ProjectDetailPage() {
   const [revealed, setRevealed] = useState({});
   const [copiedId, setCopiedId] = useState(null);
 
+  // --- Share link state ---
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [shareLink, setShareLink] = useState('');
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false); // NEW: local copy confirmation
+
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
   const loadVariables = useCallback(
@@ -140,7 +146,6 @@ export default function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, projectId]);
 
   async function handleSwitchEnv(envId) {
@@ -177,7 +182,7 @@ export default function ProjectDetailPage() {
     const trimmedKey = newKey.trim();
     if (!trimmedKey || !newValue) return;
 
-    // Duplicate check against what's already loaded for this environment
+    // Duplicate check 
     if (variables.some((v) => v.key === trimmedKey)) {
       setAddVarError(`"${trimmedKey}" already exists in ${activeEnv?.name || 'this environment'}. Delete it first.`);
       return;
@@ -291,6 +296,29 @@ export default function ProjectDetailPage() {
     downloadText(`${activeEnv?.name || 'env'}.csv`, toCsvFormat(variables));
   }
 
+  // --- Generate Share Link ---
+  async function generateShareLink() {
+    setGeneratingLink(true);
+    setError('');
+    try {
+      const res = await api.share.create(companyId, projectId, activeEnvId);
+      setShareLink(res.url);
+      setShowShareModal(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingLink(false);
+    }
+  }
+
+  async function copyShareLink() {
+    await navigator.clipboard.writeText(shareLink);
+    setShareCopied(true);               // Show inside modal
+    setNotice('Link copied to clipboard'); // Keep global notice as well
+    setTimeout(() => setShareCopied(false), 2000);
+    setTimeout(() => setNotice(''), 2000);
+  }
+
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-12">
@@ -381,6 +409,13 @@ export default function ProjectDetailPage() {
           className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper disabled:opacity-40"
         >
           Download CSV
+        </button>
+        <button
+          onClick={generateShareLink}
+          disabled={generatingLink || variables.length === 0}
+          className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+        >
+          {generatingLink ? <Spinner className="h-4 w-4" /> : 'Generate Link'}
         </button>
       </div>
 
@@ -556,6 +591,40 @@ export default function ProjectDetailPage() {
             {importSubmitting ? 'Importing' : 'Import'}
           </button>
         </form>
+      </Modal>
+
+      {/* --- Share Link Modal --- */}
+      <Modal open={showShareModal} onClose={() => setShowShareModal(false)} title="Shareable Link">
+        <div className="space-y-4">
+          <p className="text-sm text-mist">
+            This link is viewable <strong>once</strong> and will expire in <strong>1 hour</strong>.
+          </p>
+
+          {/* Local copy confirmation message */}
+          {shareCopied && (
+            <p className="text-sm text-signal">Link copied to clipboard!</p>
+          )}
+
+          <div className="flex items-center gap-2 rounded-sm border border-line bg-ink p-2">
+            <input
+              readOnly
+              value={shareLink}
+              className="flex-1 bg-transparent px-2 py-1 text-sm text-paper outline-none"
+            />
+            <button
+              onClick={copyShareLink}
+              className="rounded-sm bg-signal px-3 py-1 text-sm font-medium text-ink hover:bg-signal/90"
+            >
+              Copy
+            </button>
+          </div>
+          <button
+            onClick={() => setShowShareModal(false)}
+            className="w-full rounded-sm border border-line py-2 text-sm text-mist hover:text-paper"
+          >
+            Close
+          </button>
+        </div>
       </Modal>
     </div>
   );

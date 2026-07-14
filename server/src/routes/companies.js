@@ -258,7 +258,6 @@ router.delete('/:companyId/projects/:projectId', requireMember, async (req, res)
   const project = await getCompanyProject(req.params.companyId, req.params.projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  // Cascades to environments and env_variables via ON DELETE CASCADE.
   const { error } = await supabase.from('projects').delete().eq('id', project.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
