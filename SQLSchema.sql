@@ -113,3 +113,29 @@ create index if not exists idx_invites_token on invites(token);
 create index if not exists idx_invites_company_id on invites(company_id);
 
 create index if not exists idx_projects_company_id on projects(company_id);
+
+alter table env_variables
+  add column if not exists is_secret boolean not null default true;
+
+create table shared_links (
+  id uuid primary key default gen_random_uuid(),
+  token text unique not null,
+  encrypted_data text not null,        
+  expires_at timestamp not null,
+  viewed boolean not null default false,
+  created_at timestamp default now()
+);
+
+create index if not exists idx_shared_links_token on shared_links(token);
+
+create index if not exists idx_shared_links_expires_at on shared_links(expires_at);
+
+alter table shared_links
+  alter column expires_at type timestamptz using expires_at at time zone 'UTC';
+
+alter table invites
+  alter column expires_at type timestamptz using expires_at at time zone 'UTC';
+
+alter table users
+  add column if not exists two_factor_enabled boolean not null default false,
+  add column if not exists two_factor_secret text;
