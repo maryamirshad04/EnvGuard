@@ -28,23 +28,32 @@ sharing with authenticated, role-based access control, organized by
 ## What this is
 
 Most dev teams share `.env` files by pasting them into Slack, WhatsApp, or
-email — which means secrets sit in plaintext in chat history indefinitely,
+email which means secrets sit in plaintext in chat history indefinitely,
 with no way to know who's seen them or revoke access later.
 
 EnvGuard replaces that with:
-- **Company workspaces** — every user gets a default workspace on signup, and can create more.
-- **Role-based team access** — admins can invite teammates by email as `admin` or `member`; only admins can send invites.
-- **Projects, scoped per company** — each project auto-seeds `development` / `staging` / `production` environments, and you can add custom ones.
-- **Encrypted variables** — values are encrypted at rest (AES-256-GCM) before they touch the database.
+- **Company workspaces**  every user gets a default workspace on signup, and can create more, with rename/delete support.
+- **Role-based team access**  admins can invite teammates by email as `admin` or `member`; only admins can send invites.
+- **Projects, scoped per company** each project auto-seeds `development` / `staging` / `production` environments, with custom ones and rename/delete support too.
+- **Encrypted variables** values are encrypted at rest (AES-256-GCM) before they touch the database, with a per-variable `protected` (masked) or `plain` (shown outright) mode.
+- **One-time shareable links** generate a link that shows an environment's variables exactly once, with a custom expiry you set (5 minutes to 7 days).
 
 ## Features
 
 - Email/password auth with JWT sessions (httpOnly cookies)
-- Company creation + team invites via email (Mailjet)
+- Optional two-factor authentication (TOTP, Google Authenticator / Authy / Microsoft Authenticator compatible), toggled from Settings, with a one-time onboarding prompt after signup
+- Company creation + team invites via email (Mailjet), with rename/delete for companies and projects
 - Admin vs. member roles, enforced server-side on every request
 - Project → environment → variable hierarchy
-- Reveal/hide and copy-to-clipboard for variable values
-- Encrypted-at-rest storage — the database only ever sees ciphertext
+- Variables can be `protected` (masked, reveal on click) or `plain` (shown outright)
+- Reveal/hide and copy-to-clipboard (single or copy-all) for variable values
+- Bulk import via pasted `KEY=VALUE` text or uploading a `.env` file directly
+- Export an environment as `.env` or CSV
+- One-time, expiring shareable links for handing off a whole environment without an account
+- Encrypted-at-rest storage the database only ever sees ciphertext
+- Skeleton loading states and button spinners throughout, instead of blank/frozen-looking screens
+- Inline, in-modal error handling (empty fields, duplicate keys, etc.) instead of silent no-ops
+- Structured server-side logging with Pino
 
 ## Tech stack
 
@@ -53,20 +62,22 @@ EnvGuard replaces that with:
 | Frontend   | Next.js, React, Tailwind CSS |
 | Backend    | Node.js, Express |
 | Database   | Supabase (Postgres) |
-| Auth       | JWT (httpOnly cookies), bcrypt |
+| Auth       | JWT (httpOnly cookies), bcrypt, TOTP via `otplib` |
 | Encryption | AES-256-GCM (Node `crypto`), TLS in transit |
 | Email      | Mailjet (team invite emails) |
+| Logging    | Pino |
 
 ## Architecture
 
 ```
 User
- └── Company (workspace)          — created on signup, or manually
+ └── Company (workspace)          — created on signup, or manually; rename/delete
       ├── company_members         — role: admin | member
       ├── invites                 — pending/accepted/revoked
-      └── Project
+      └── Project                 — rename/delete
            └── Environment         — development / staging / production / custom
-                └── Variable       — key + AES-256-GCM encrypted value
+                ├── Variable       — key + AES-256-GCM encrypted value, protected or plain
+                └── Shared link    — one-time, expiring, decrypted snapshot for handoff
 ```
 
 ## Getting started
@@ -141,4 +152,4 @@ cd client
 npm run dev
 ```
 
-Visit `http://localhost:3000`. Sign up — you'll land in a default "My Workspace" company as its admin, ready to create projects and invite teammates.
+Visit `http://localhost:3000`. Sign up and you'll land in a default "My Workspace" company as its admin, ready to create projects and invite teammates.
