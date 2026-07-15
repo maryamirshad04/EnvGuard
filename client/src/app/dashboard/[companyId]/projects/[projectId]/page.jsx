@@ -61,7 +61,7 @@ function downloadText(filename, content) {
   URL.revokeObjectURL(url);
 }
 
-const EXPIRY_OPTIONS = [
+const PRESET_EXPIRY = [
   { label: '15 minutes', minutes: 15 },
   { label: '1 hour', minutes: 60 },
   { label: '6 hours', minutes: 360 },
@@ -103,17 +103,20 @@ export default function ProjectDetailPage() {
   const [revealed, setRevealed] = useState({});
   const [copiedId, setCopiedId] = useState(null);
 
-  // --- Delete-variable confirmation ---
-  const [deletingVar, setDeletingVar] = useState(null); // variable object or null
+  const [deletingVar, setDeletingVar] = useState(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   // --- Share link state ---
   const [shareExpiryOpen, setShareExpiryOpen] = useState(false);
   const [shareExpiryMinutes, setShareExpiryMinutes] = useState(60);
+  const [customExpiryValue, setCustomExpiryValue] = useState(1);
+  const [customExpiryUnit, setCustomExpiryUnit] = useState('hours');
+  const [isCustomExpiry, setIsCustomExpiry] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [shareError, setShareError] = useState('');
   const [shareLink, setShareLink] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false); // NEW
 
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
@@ -331,12 +334,46 @@ export default function ProjectDetailPage() {
   // --- Generate Share Link ---
   async function handleGenerateLink(e) {
     e.preventDefault();
+
+    let minutes = shareExpiryMinutes;
+    if (isCustomExpiry) {
+      const val = parseFloat(customExpiryValue);
+      if (isNaN(val) || val <= 0) {
+        setShareError('Please enter a positive number.');
+        return;
+      }
+      let computedMinutes;
+      switch (customExpiryUnit) {
+        case 'minutes':
+          computedMinutes = val;
+          break;
+        case 'hours':
+          computedMinutes = val * 60;
+          break;
+        case 'days':
+          computedMinutes = val * 1440;
+          break;
+        default:
+          computedMinutes = val;
+      }
+      minutes = Math.round(computedMinutes);
+      if (minutes < 5) {
+        setShareError('Minimum expiry is 5 minutes.');
+        return;
+      }
+      if (minutes > 10080) {
+        setShareError('Maximum expiry is 7 days.');
+        return;
+      }
+    }
+
     setShareError('');
     setGeneratingLink(true);
     try {
-      const res = await api.share.create(companyId, projectId, activeEnvId, shareExpiryMinutes);
+      const res = await api.share.create(companyId, projectId, activeEnvId, minutes);
       setShareLink(res.url);
       setShareExpiryOpen(false);
+      setShareCopied(false); // Reset copied state when modal opens
       setShowShareModal(true);
     } catch (err) {
       setShareError(err.message);
@@ -347,7 +384,8 @@ export default function ProjectDetailPage() {
 
   async function copyShareLink() {
     await navigator.clipboard.writeText(shareLink);
-    setNotice('Link copied to clipboard');
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 1500);
     setTimeout(() => setNotice(''), 2000);
   }
 
@@ -424,9 +462,6 @@ export default function ProjectDetailPage() {
           Import .env
         </button>
 
-        {/* These only make sense once there's something to act on - hidden
-            entirely rather than shown disabled, so the toolbar isn't
-            cluttered with buttons that can't do anything yet. */}
         {hasVariables && (
           <>
             <button
@@ -451,6 +486,9 @@ export default function ProjectDetailPage() {
               onClick={() => {
                 setShareError('');
                 setShareExpiryMinutes(60);
+                setIsCustomExpiry(false);
+                setCustomExpiryValue(1);
+                setCustomExpiryUnit('hours');
                 setShareExpiryOpen(true);
               }}
               className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90"
@@ -542,7 +580,7 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {addEnvSubmitting && <Spinner className="h-4 w-4" />}
-            {addEnvSubmitting ? 'Creating\u2026' : 'Create'}
+            {addEnvSubmitting ? 'Creating…' : 'Create'}
           </button>
         </form>
       </Modal>
@@ -590,7 +628,7 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {addVarSubmitting && <Spinner className="h-4 w-4" />}
-            {addVarSubmitting ? 'Adding\u2026' : 'Add variable'}
+            {addVarSubmitting ? 'Adding…' : 'Add variable'}
           </button>
         </form>
       </Modal>
@@ -630,7 +668,7 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {importSubmitting && <Spinner className="h-4 w-4" />}
-            {importSubmitting ? 'Importing\u2026' : 'Import'}
+            {importSubmitting ? 'Importing…' : 'Import'}
           </button>
         </form>
       </Modal>
@@ -638,7 +676,7 @@ export default function ProjectDetailPage() {
       {/* Delete variable confirmation */}
       <Modal open={!!deletingVar} onClose={() => setDeletingVar(null)} title="Delete variable">
         <p className="text-sm text-alert">
-          Delete <span className="font-mono">{deletingVar?.key}</span> permanently? This can&apos;t be
+          Delete <span className="font-mono">{deletingVar?.key}</span> permanently? This can't be
           undone.
         </p>
         <div className="mt-4 flex gap-2">
@@ -659,39 +697,78 @@ export default function ProjectDetailPage() {
         </div>
       </Modal>
 
-      {/* Choose expiry, then generate */}
+      {/* Choose expiry modal */}
       <Modal open={shareExpiryOpen} onClose={() => setShareExpiryOpen(false)} title="Generate link">
         <form onSubmit={handleGenerateLink} className="space-y-3">
           <p className="text-xs text-mist">
             This link will show every variable in <span className="font-mono">{activeEnv?.name}</span>{' '}
-            one time, then stop working. Choose how long it stays valid if it&apos;s never opened.
+            one time, then stop working. Choose how long it stays valid if it's never opened.
           </p>
+
           <div className="space-y-2">
-            {EXPIRY_OPTIONS.map((opt) => (
+            {PRESET_EXPIRY.map((opt) => (
               <label key={opt.minutes} className="flex items-center gap-2 text-sm text-paper">
                 <input
                   type="radio"
                   name="expiry"
-                  checked={shareExpiryMinutes === opt.minutes}
-                  onChange={() => setShareExpiryMinutes(opt.minutes)}
+                  checked={!isCustomExpiry && shareExpiryMinutes === opt.minutes}
+                  onChange={() => {
+                    setIsCustomExpiry(false);
+                    setShareExpiryMinutes(opt.minutes);
+                  }}
                   className="accent-signal"
                 />
                 {opt.label}
               </label>
             ))}
+
+            <label className="flex items-center gap-2 text-sm text-paper">
+              <input
+                type="radio"
+                name="expiry"
+                checked={isCustomExpiry}
+                onChange={() => setIsCustomExpiry(true)}
+                className="accent-signal"
+              />
+              Custom
+            </label>
+
+            {isCustomExpiry && (
+              <div className="ml-6 flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={customExpiryValue}
+                  onChange={(e) => setCustomExpiryValue(parseFloat(e.target.value) || 0)}
+                  className="w-20 rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
+                />
+                <select
+                  value={customExpiryUnit}
+                  onChange={(e) => setCustomExpiryUnit(e.target.value)}
+                  className="rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
+                >
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                  <option value="days">days</option>
+                </select>
+                <span className="text-xs text-mist">(5 min – 7 days)</span>
+              </div>
+            )}
           </div>
+
           {shareError && <p className="text-sm text-alert">{shareError}</p>}
           <button
             disabled={generatingLink}
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {generatingLink && <Spinner className="h-4 w-4" />}
-            {generatingLink ? 'Generating\u2026' : 'Generate link'}
+            {generatingLink ? 'Generating…' : 'Generate link'}
           </button>
         </form>
       </Modal>
 
-      {/* Share link result */}
+      {/* Share link result modal with "Copied!" message */}
       <Modal open={showShareModal} onClose={() => setShowShareModal(false)} title="Shareable link">
         <div className="space-y-4">
           <p className="text-sm text-mist">
@@ -709,6 +786,9 @@ export default function ProjectDetailPage() {
             >
               Copy
             </button>
+            {shareCopied && (
+              <span className="text-xs text-signal animate-pulse">Copied!</span>
+            )}
           </div>
           <button
             onClick={() => setShowShareModal(false)}
