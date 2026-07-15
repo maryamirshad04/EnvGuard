@@ -28,7 +28,6 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Set only if the account has 2FA on - switches the form to the code step
   const [tempToken, setTempToken] = useState(null);
   const [code, setCode] = useState('');
 

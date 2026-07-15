@@ -1,135 +1,139 @@
-'use client';
+const express = require('express');
+const crypto = require('crypto');
+const supabase = require('../config/supabase');
+const requireAuth = require('../middleware/auth');
+const { encrypt, decrypt } = require('../utils/crypto');
 
-import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
-import { api } from '@/lib/api';
-import Spinner from '@/components/Spinner';
+const router = express.Router();
 
-export default function SharedViewPage() {
-  const { token } = useParams();
-  const [variables, setVariables] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [revealed, setRevealed] = useState({});
-  const [copiedIdx, setCopiedIdx] = useState(null);
-  const fetchedRef = useRef(false);
+const MIN_EXPIRY_MINUTES = 5;
+const MAX_EXPIRY_MINUTES = 7 * 24 * 60; // 7 days
+const DEFAULT_EXPIRY_MINUTES = 60;
 
-  useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+// Helper: get environment with company/project checks
+async function getEnvironmentWithAccess(companyId, projectId, envId, userId) {
+  const { data: membership, error: memErr } = await supabase
+    .from('company_members')
+    .select('role')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .single();
 
-    async function fetchShared() {
-      try {
-        const data = await api.share.get(token);
-        setVariables(data.variables || []);
-      } catch (err) {
-        setError(err.message || 'Failed to load shared data');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchShared();
-  }, [token]);
+  if (memErr || !membership) return null;
 
-  function toggleReveal(idx) {
-    setRevealed((prev) => ({ ...prev, [idx]: !prev[idx] }));
-  }
+  const { data: project, error: projErr } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('company_id', companyId)
+    .single();
 
-  async function handleCopy(idx, value) {
-    await navigator.clipboard.writeText(value);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 1500);
-  }
+  if (projErr || !project) return null;
 
-  async function handleCopyAll() {
-    const text = variables.map((v) => `${v.key}=${v.value}`).join('\n');
-    await navigator.clipboard.writeText(text);
-    setCopiedIdx('all');
-    setTimeout(() => setCopiedIdx(null), 1500);
-  }
+  const { data: env, error: envErr } = await supabase
+    .from('environments')
+    .select('*')
+    .eq('id', envId)
+    .eq('project_id', project.id)
+    .single();
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Spinner className="h-8 w-8" />
-      </div>
-    );
-  }
+  if (envErr || !env) return null;
 
-  if (error) {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-        <h1 className="text-2xl font-semibold text-paper">Link unavailable</h1>
-        <p className="mt-4 text-mist">{error}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-paper">Shared environment variables</h1>
-      <p className="mt-1 text-sm text-mist">This link was viewed once and cannot be viewed again.</p>
-
-      {variables.length === 0 ? (
-        <div className="mt-8 rounded-sm border border-dashed border-line p-10 text-center">
-          <p className="font-mono text-sm text-mist">No variables shared.</p>
-        </div>
-      ) : (
-        <>
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleCopyAll}
-              className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
-            >
-              {copiedIdx === 'all' ? 'Copied' : 'Copy all'}
-            </button>
-          </div>
-
-          <ul className="mt-3 divide-y divide-line rounded-sm border border-line bg-surface">
-            {variables.map((v, idx) => {
-              const isSecret = v.is_secret !== false;
-              return (
-                <li
-                  key={idx}
-                  className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-sm text-paper">{v.key}</p>
-                      <span
-                        className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
-                          isSecret ? 'border border-line text-mist' : 'bg-signal/15 text-signal'
-                        }`}
-                      >
-                        {isSecret ? 'protected' : 'plain'}
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate font-mono text-sm text-mist">
-                      {!isSecret || revealed[idx] ? v.value : '\u2022'.repeat(Math.min(v.value.length, 24))}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {isSecret && (
-                      <button
-                        onClick={() => toggleReveal(idx)}
-                        className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
-                      >
-                        {revealed[idx] ? 'Hide' : 'Reveal'}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleCopy(idx, v.value)}
-                      className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
-                    >
-                      {copiedIdx === idx ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-    </div>
-  );
+  return env;
 }
+
+// Generate a share link (requires authentication and membership)
+router.post('/share', requireAuth, async (req, res) => {
+  const { companyId, projectId, environmentId, expiresInMinutes } = req.body;
+
+  if (!companyId || !projectId || !environmentId) {
+    return res.status(400).json({ error: 'companyId, projectId, and environmentId are required' });
+  }
+
+  let minutes = Number(expiresInMinutes) || DEFAULT_EXPIRY_MINUTES;
+  minutes = Math.min(Math.max(minutes, MIN_EXPIRY_MINUTES), MAX_EXPIRY_MINUTES);
+
+  const env = await getEnvironmentWithAccess(companyId, projectId, environmentId, req.user.userId);
+  if (!env) {
+    return res.status(403).json({ error: 'You do not have access to this environment' });
+  }
+
+  const { data: variables, error: varErr } = await supabase
+    .from('env_variables')
+    .select('key, value_encrypted, is_secret')
+    .eq('environment_id', env.id)
+    .order('key');
+
+  if (varErr) {
+    return res.status(500).json({ error: varErr.message });
+  }
+
+  const decryptedVars = variables.map((v) => ({
+    key: v.key,
+    value: decrypt(v.value_encrypted),
+    is_secret: v.is_secret,
+  }));
+
+  const payload = JSON.stringify(decryptedVars);
+  const encryptedPayload = encrypt(payload);
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
+
+  const { error: insertErr } = await supabase
+    .from('shared_links')
+    .insert({
+      token,
+      encrypted_data: encryptedPayload,
+      expires_at: expiresAt.toISOString(),
+      viewed: false,
+    })
+    .select()
+    .single();
+
+  if (insertErr) {
+    return res.status(500).json({ error: insertErr.message });
+  }
+
+  const shareUrl = `${process.env.CLIENT_URL}/share/${token}`;
+
+  res.status(201).json({ url: shareUrl, expiresAt: expiresAt.toISOString() });
+});
+
+// Retrieve a shared link (no authentication required)
+router.get('/share/:token', async (req, res) => {
+  const { token } = req.params;
+
+  const { data: link, error: findErr } = await supabase
+    .from('shared_links')
+    .select('*')
+    .eq('token', token)
+    .single();
+
+  if (findErr || !link) {
+    return res.status(404).json({ error: 'Link not found' });
+  }
+
+  if (new Date(link.expires_at) < new Date()) {
+    await supabase.from('shared_links').delete().eq('id', link.id);
+    return res.status(410).json({ error: 'This link has expired' });
+  }
+
+  if (link.viewed) {
+    return res.status(410).json({ error: 'This link has already been viewed' });
+  }
+
+  await supabase.from('shared_links').update({ viewed: true }).eq('id', link.id);
+
+  let decrypted;
+  try {
+    const decryptedPayload = decrypt(link.encrypted_data);
+    decrypted = JSON.parse(decryptedPayload);
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to decrypt data' });
+  }
+
+  res.json({ variables: decrypted });
+});
+
+module.exports = router;

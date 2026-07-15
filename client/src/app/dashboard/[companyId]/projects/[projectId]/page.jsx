@@ -61,6 +61,14 @@ function downloadText(filename, content) {
   URL.revokeObjectURL(url);
 }
 
+const EXPIRY_OPTIONS = [
+  { label: '15 minutes', minutes: 15 },
+  { label: '1 hour', minutes: 60 },
+  { label: '6 hours', minutes: 360 },
+  { label: '24 hours', minutes: 1440 },
+  { label: '7 days', minutes: 10080 },
+];
+
 export default function ProjectDetailPage() {
   const { companyId, projectId } = useParams();
   const router = useRouter();
@@ -95,11 +103,17 @@ export default function ProjectDetailPage() {
   const [revealed, setRevealed] = useState({});
   const [copiedId, setCopiedId] = useState(null);
 
+  // --- Delete-variable confirmation ---
+  const [deletingVar, setDeletingVar] = useState(null); // variable object or null
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
   // --- Share link state ---
+  const [shareExpiryOpen, setShareExpiryOpen] = useState(false);
+  const [shareExpiryMinutes, setShareExpiryMinutes] = useState(60);
   const [generatingLink, setGeneratingLink] = useState(false);
+  const [shareError, setShareError] = useState('');
   const [shareLink, setShareLink] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false); // NEW: local copy confirmation
 
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
@@ -146,6 +160,7 @@ export default function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, projectId]);
 
   async function handleSwitchEnv(envId) {
@@ -180,11 +195,24 @@ export default function ProjectDetailPage() {
   async function handleAddVariable(e) {
     e.preventDefault();
     const trimmedKey = newKey.trim();
-    if (!trimmedKey || !newValue) return;
 
-    // Duplicate check 
+    if (!trimmedKey && !newValue) {
+      setAddVarError('Both key and value are required.');
+      return;
+    }
+    if (!trimmedKey) {
+      setAddVarError('Key is required.');
+      return;
+    }
+    if (!newValue) {
+      setAddVarError('Value is required.');
+      return;
+    }
+
     if (variables.some((v) => v.key === trimmedKey)) {
-      setAddVarError(`"${trimmedKey}" already exists in ${activeEnv?.name || 'this environment'}. Delete it first.`);
+      setAddVarError(
+        `"${trimmedKey}" already exists in ${activeEnv?.name || 'this environment'}. Delete it first.`
+      );
       return;
     }
 
@@ -219,15 +247,15 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    const keys = parsed.map(v => v.key);
+    const keys = parsed.map((v) => v.key);
     const duplicatesWithin = keys.filter((key, index) => keys.indexOf(key) !== index);
     if (duplicatesWithin.length > 0) {
       setImportError(`Duplicate keys found in import: ${[...new Set(duplicatesWithin)].join(', ')}`);
       return;
     }
 
-    const existingKeys = new Set(variables.map(v => v.key));
-    const duplicatesWithExisting = parsed.filter(v => existingKeys.has(v.key));
+    const existingKeys = new Set(variables.map((v) => v.key));
+    const duplicatesWithExisting = parsed.filter((v) => existingKeys.has(v.key));
     if (duplicatesWithExisting.length > 0) {
       setImportError(`Duplicate keys already exist. Delete them first.`);
       return;
@@ -263,12 +291,16 @@ export default function ProjectDetailPage() {
     reader.readAsText(file);
   }
 
-  async function handleDeleteVariable(varId) {
+  async function handleConfirmDelete() {
+    setDeleteSubmitting(true);
     try {
-      await api.companies.projects.deleteVariable(companyId, projectId, activeEnvId, varId);
-      setVariables((prev) => prev.filter((v) => v.id !== varId));
+      await api.companies.projects.deleteVariable(companyId, projectId, activeEnvId, deletingVar.id);
+      setVariables((prev) => prev.filter((v) => v.id !== deletingVar.id));
+      setDeletingVar(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleteSubmitting(false);
     }
   }
 
@@ -297,15 +329,17 @@ export default function ProjectDetailPage() {
   }
 
   // --- Generate Share Link ---
-  async function generateShareLink() {
+  async function handleGenerateLink(e) {
+    e.preventDefault();
+    setShareError('');
     setGeneratingLink(true);
-    setError('');
     try {
-      const res = await api.share.create(companyId, projectId, activeEnvId);
+      const res = await api.share.create(companyId, projectId, activeEnvId, shareExpiryMinutes);
       setShareLink(res.url);
+      setShareExpiryOpen(false);
       setShowShareModal(true);
     } catch (err) {
-      setError(err.message);
+      setShareError(err.message);
     } finally {
       setGeneratingLink(false);
     }
@@ -313,9 +347,7 @@ export default function ProjectDetailPage() {
 
   async function copyShareLink() {
     await navigator.clipboard.writeText(shareLink);
-    setShareCopied(true);               // Show inside modal
-    setNotice('Link copied to clipboard'); // Keep global notice as well
-    setTimeout(() => setShareCopied(false), 2000);
+    setNotice('Link copied to clipboard');
     setTimeout(() => setNotice(''), 2000);
   }
 
@@ -326,6 +358,8 @@ export default function ProjectDetailPage() {
       </div>
     );
   }
+
+  const hasVariables = variables.length > 0;
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
@@ -389,34 +423,42 @@ export default function ProjectDetailPage() {
         >
           Import .env
         </button>
-        <button
-          onClick={handleCopyAll}
-          disabled={variables.length === 0}
-          className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper disabled:opacity-40"
-        >
-          Copy all
-        </button>
-        <button
-          onClick={handleDownloadEnv}
-          disabled={variables.length === 0}
-          className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper disabled:opacity-40"
-        >
-          Download .env
-        </button>
-        <button
-          onClick={handleDownloadCsv}
-          disabled={variables.length === 0}
-          className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper disabled:opacity-40"
-        >
-          Download CSV
-        </button>
-        <button
-          onClick={generateShareLink}
-          disabled={generatingLink || variables.length === 0}
-          className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
-        >
-          {generatingLink ? <Spinner className="h-4 w-4" /> : 'Generate Link'}
-        </button>
+
+        {/* These only make sense once there's something to act on - hidden
+            entirely rather than shown disabled, so the toolbar isn't
+            cluttered with buttons that can't do anything yet. */}
+        {hasVariables && (
+          <>
+            <button
+              onClick={handleCopyAll}
+              className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
+            >
+              Copy all
+            </button>
+            <button
+              onClick={handleDownloadEnv}
+              className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
+            >
+              Download .env
+            </button>
+            <button
+              onClick={handleDownloadCsv}
+              className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
+            >
+              Download CSV
+            </button>
+            <button
+              onClick={() => {
+                setShareError('');
+                setShareExpiryMinutes(60);
+                setShareExpiryOpen(true);
+              }}
+              className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90"
+            >
+              Generate link
+            </button>
+          </>
+        )}
       </div>
 
       {/* Variables list */}
@@ -434,7 +476,7 @@ export default function ProjectDetailPage() {
         ) : (
           <ul className="divide-y divide-line rounded-sm border border-line bg-surface">
             {variables.map((v) => {
-              const isSecret = v.is_secret !== false; // treat missing/undefined as protected
+              const isSecret = v.is_secret !== false;
               return (
                 <li
                   key={v.id}
@@ -471,7 +513,7 @@ export default function ProjectDetailPage() {
                       {copiedId === v.id ? 'Copied' : 'Copy'}
                     </button>
                     <button
-                      onClick={() => handleDeleteVariable(v.id)}
+                      onClick={() => setDeletingVar(v)}
                       className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
                     >
                       Delete
@@ -588,23 +630,73 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {importSubmitting && <Spinner className="h-4 w-4" />}
-            {importSubmitting ? 'Importing' : 'Import'}
+            {importSubmitting ? 'Importing\u2026' : 'Import'}
           </button>
         </form>
       </Modal>
 
-      {/* --- Share Link Modal --- */}
-      <Modal open={showShareModal} onClose={() => setShowShareModal(false)} title="Shareable Link">
+      {/* Delete variable confirmation */}
+      <Modal open={!!deletingVar} onClose={() => setDeletingVar(null)} title="Delete variable">
+        <p className="text-sm text-alert">
+          Delete <span className="font-mono">{deletingVar?.key}</span> permanently? This can&apos;t be
+          undone.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handleConfirmDelete}
+            disabled={deleteSubmitting}
+            className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-alert px-4 py-2 text-sm font-medium text-ink hover:bg-alert/90 disabled:opacity-60"
+          >
+            {deleteSubmitting && <Spinner className="h-4 w-4" />}
+            Yes, delete
+          </button>
+          <button
+            onClick={() => setDeletingVar(null)}
+            className="flex-1 rounded-sm border border-line px-4 py-2 text-sm text-mist hover:text-paper"
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      {/* Choose expiry, then generate */}
+      <Modal open={shareExpiryOpen} onClose={() => setShareExpiryOpen(false)} title="Generate link">
+        <form onSubmit={handleGenerateLink} className="space-y-3">
+          <p className="text-xs text-mist">
+            This link will show every variable in <span className="font-mono">{activeEnv?.name}</span>{' '}
+            one time, then stop working. Choose how long it stays valid if it&apos;s never opened.
+          </p>
+          <div className="space-y-2">
+            {EXPIRY_OPTIONS.map((opt) => (
+              <label key={opt.minutes} className="flex items-center gap-2 text-sm text-paper">
+                <input
+                  type="radio"
+                  name="expiry"
+                  checked={shareExpiryMinutes === opt.minutes}
+                  onChange={() => setShareExpiryMinutes(opt.minutes)}
+                  className="accent-signal"
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+          {shareError && <p className="text-sm text-alert">{shareError}</p>}
+          <button
+            disabled={generatingLink}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+          >
+            {generatingLink && <Spinner className="h-4 w-4" />}
+            {generatingLink ? 'Generating\u2026' : 'Generate link'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Share link result */}
+      <Modal open={showShareModal} onClose={() => setShowShareModal(false)} title="Shareable link">
         <div className="space-y-4">
           <p className="text-sm text-mist">
-            This link is viewable <strong>once</strong> and will expire in <strong>1 hour</strong>.
+            This link is viewable <strong>once</strong>.
           </p>
-
-          {/* Local copy confirmation message */}
-          {shareCopied && (
-            <p className="text-sm text-signal">Link copied to clipboard!</p>
-          )}
-
           <div className="flex items-center gap-2 rounded-sm border border-line bg-ink p-2">
             <input
               readOnly
