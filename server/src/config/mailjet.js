@@ -1,17 +1,6 @@
 const Mailjet = require('node-mailjet');
 const logger = require('../utils/logger');
-
-function maskEmail(email) {
-  if (!email) return 'unknown';
-  const atIndex = email.indexOf('@');
-  if (atIndex === -1) return email; 
-  const local = email.substring(0, atIndex);
-  const domain = email.substring(atIndex);
-  if (local.length <= 3) {
-    return '***' + domain;
-  }
-  return local.substring(0, 3) + '***' + domain;
-}
+const { maskEmail } = require('../utils/helpers');
 
 if (!process.env.MAILJET_API_KEY || !process.env.MAILJET_API_SECRET) {
   logger.error('Missing MAILJET_API_KEY or MAILJET_API_SECRET in .env');

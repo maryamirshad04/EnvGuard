@@ -1,17 +1,6 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger'); 
-
-function maskEmail(email) {
-  if (!email) return 'unknown';
-  const atIndex = email.indexOf('@');
-  if (atIndex === -1) return email;
-  const local = email.substring(0, atIndex);
-  const domain = email.substring(atIndex);
-  if (local.length <= 3) {
-    return '***' + domain;
-  }
-  return local.substring(0, 3) + '***' + domain;
-}
+const { maskEmail } = require('../utils/helpers');
 
 function requireAuth(req, res, next) {
   let token = req.cookies?.token;

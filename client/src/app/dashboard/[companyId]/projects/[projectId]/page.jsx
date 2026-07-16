@@ -18,6 +18,32 @@ function envDotColor(name) {
   return ENV_COLORS[name] || 'bg-mist';
 }
 
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3 3l18 18M10.6 10.7a3 3 0 004.2 4.2M6.6 6.8C4 8.4 2 12 2 12s4 7 11 7c2 0 3.7-.5 5.1-1.2M17.9 17.4C20.4 15.8 22 12 22 12s-1.6-2.9-4.3-4.9M9.9 5.2C10.6 5.1 11.3 5 12 5c7 0 11 7 11 7"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function parseEnvText(text) {
   return text
     .split('\n')
@@ -90,6 +116,7 @@ export default function ProjectDetailPage() {
   const [addVarOpen, setAddVarOpen] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
+  const [showNewValue, setShowNewValue] = useState(false);
   const [newIsSecret, setNewIsSecret] = useState(true);
   const [addVarSubmitting, setAddVarSubmitting] = useState(false);
   const [addVarError, setAddVarError] = useState('');
@@ -106,7 +133,6 @@ export default function ProjectDetailPage() {
   const [deletingVar, setDeletingVar] = useState(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
-  // --- Share link state ---
   const [shareExpiryOpen, setShareExpiryOpen] = useState(false);
   const [shareExpiryMinutes, setShareExpiryMinutes] = useState(60);
   const [customExpiryValue, setCustomExpiryValue] = useState(1);
@@ -116,7 +142,7 @@ export default function ProjectDetailPage() {
   const [shareError, setShareError] = useState('');
   const [shareLink, setShareLink] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false); // NEW
+  const [shareCopied, setShareCopied] = useState(false);
 
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
@@ -163,7 +189,6 @@ export default function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, projectId]);
 
   async function handleSwitchEnv(envId) {
@@ -233,6 +258,7 @@ export default function ProjectDetailPage() {
       setVariables((prev) => [...prev, variable].sort((a, b) => a.key.localeCompare(b.key)));
       setNewKey('');
       setNewValue('');
+      setShowNewValue(false);
       setNewIsSecret(true);
       setAddVarOpen(false);
     } catch (err) {
@@ -373,7 +399,7 @@ export default function ProjectDetailPage() {
       const res = await api.share.create(companyId, projectId, activeEnvId, minutes);
       setShareLink(res.url);
       setShareExpiryOpen(false);
-      setShareCopied(false); // Reset copied state when modal opens
+      setShareCopied(false);
       setShowShareModal(true);
     } catch (err) {
       setShareError(err.message);
@@ -386,7 +412,6 @@ export default function ProjectDetailPage() {
     await navigator.clipboard.writeText(shareLink);
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 1500);
-    setTimeout(() => setNotice(''), 2000);
   }
 
   if (loading) {
@@ -446,6 +471,7 @@ export default function ProjectDetailPage() {
         <button
           onClick={() => {
             setAddVarError('');
+            setShowNewValue(false);
             setAddVarOpen(true);
           }}
           className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90"
@@ -580,7 +606,7 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {addEnvSubmitting && <Spinner className="h-4 w-4" />}
-            {addEnvSubmitting ? 'Creating…' : 'Create'}
+            {addEnvSubmitting ? 'Creating\u2026' : 'Create'}
           </button>
         </form>
       </Modal>
@@ -602,17 +628,27 @@ export default function ProjectDetailPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs text-mist">Value</label>
-            <input
-              type="text"
-              autoComplete="off"
-              data-lpignore="true"
-              data-1p-ignore
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              placeholder="postgres://..."
-              style={{ WebkitTextSecurity: 'disc' }}
-              className="w-full rounded-sm border border-line bg-ink px-3 py-2 font-mono text-sm text-paper outline-none focus:border-signal"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                placeholder="postgres://..."
+                style={showNewValue ? undefined : { WebkitTextSecurity: 'disc' }}
+                className="w-full rounded-sm border border-line bg-ink px-3 py-2 pr-10 font-mono text-sm text-paper outline-none focus:border-signal"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewValue((v) => !v)}
+                aria-label={showNewValue ? 'Hide value' : 'Show value'}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-mist hover:text-paper"
+              >
+                {showNewValue ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
           </div>
           <label className="flex items-center gap-2 text-xs text-mist">
             <input
@@ -628,7 +664,7 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {addVarSubmitting && <Spinner className="h-4 w-4" />}
-            {addVarSubmitting ? 'Adding…' : 'Add variable'}
+            {addVarSubmitting ? 'Adding\u2026' : 'Add variable'}
           </button>
         </form>
       </Modal>
@@ -668,7 +704,7 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {importSubmitting && <Spinner className="h-4 w-4" />}
-            {importSubmitting ? 'Importing…' : 'Import'}
+            {importSubmitting ? 'Importing\u2026' : 'Import'}
           </button>
         </form>
       </Modal>
@@ -676,7 +712,7 @@ export default function ProjectDetailPage() {
       {/* Delete variable confirmation */}
       <Modal open={!!deletingVar} onClose={() => setDeletingVar(null)} title="Delete variable">
         <p className="text-sm text-alert">
-          Delete <span className="font-mono">{deletingVar?.key}</span> permanently? This can't be
+          Delete <span className="font-mono">{deletingVar?.key}</span> permanently? This can&apos;t be
           undone.
         </p>
         <div className="mt-4 flex gap-2">
@@ -702,7 +738,7 @@ export default function ProjectDetailPage() {
         <form onSubmit={handleGenerateLink} className="space-y-3">
           <p className="text-xs text-mist">
             This link will show every variable in <span className="font-mono">{activeEnv?.name}</span>{' '}
-            one time, then stop working. Choose how long it stays valid if it's never opened.
+            one time, then stop working. Choose how long it stays valid if it&apos;s never opened.
           </p>
 
           <div className="space-y-2">
@@ -752,7 +788,7 @@ export default function ProjectDetailPage() {
                   <option value="hours">hours</option>
                   <option value="days">days</option>
                 </select>
-                <span className="text-xs text-mist">(5 min – 7 days)</span>
+                <span className="text-xs text-mist">(5 min &ndash; 7 days)</span>
               </div>
             )}
           </div>
@@ -763,12 +799,12 @@ export default function ProjectDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {generatingLink && <Spinner className="h-4 w-4" />}
-            {generatingLink ? 'Generating…' : 'Generate link'}
+            {generatingLink ? 'Generating\u2026' : 'Generate link'}
           </button>
         </form>
       </Modal>
 
-      {/* Share link result modal with "Copied!" message */}
+      {/* Share link result modal */}
       <Modal open={showShareModal} onClose={() => setShowShareModal(false)} title="Shareable link">
         <div className="space-y-4">
           <p className="text-sm text-mist">
@@ -786,9 +822,7 @@ export default function ProjectDetailPage() {
             >
               Copy
             </button>
-            {shareCopied && (
-              <span className="text-xs text-signal animate-pulse">Copied!</span>
-            )}
+            {shareCopied && <span className="animate-pulse text-xs text-signal">Copied!</span>}
           </div>
           <button
             onClick={() => setShowShareModal(false)}

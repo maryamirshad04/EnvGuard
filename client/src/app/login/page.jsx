@@ -5,6 +5,32 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3 3l18 18M10.6 10.7a3 3 0 004.2 4.2M6.6 6.8C4 8.4 2 12 2 12s4 7 11 7c2 0 3.7-.5 5.1-1.2M17.9 17.4C20.4 15.8 22 12 22 12s-1.6-2.9-4.3-4.9M9.9 5.2C10.6 5.1 11.3 5 12 5c7 0 11 7 11 7"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   return (
     <Suspense
@@ -25,6 +51,7 @@ function LoginForm() {
   const redirect = searchParams.get('redirect') || '/dashboard';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -99,15 +126,25 @@ function LoginForm() {
                 <label htmlFor="password" className="mb-1 block text-sm text-mist">
                   Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-sm border border-line bg-ink px-3 py-2 pr-10 text-sm text-paper outline-none focus:border-signal"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-mist hover:text-paper"
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
               </div>
 
               {error && <p className="text-sm text-alert">{error}</p>}

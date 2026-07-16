@@ -1,4 +1,3 @@
-// src/config/supabase.js
 const { createClient } = require('@supabase/supabase-js');
 const logger = require('../utils/logger');
 

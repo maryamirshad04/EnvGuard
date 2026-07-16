@@ -2,20 +2,9 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const requireAuth = require('../middleware/auth');
 const logger = require('../utils/logger');
+const { maskEmail } = require('../utils/helpers');
 
 const router = express.Router();
-
-function maskEmail(email) {
-  if (!email) return 'unknown';
-  const atIndex = email.indexOf('@');
-  if (atIndex === -1) return email;
-  const local = email.substring(0, atIndex);
-  const domain = email.substring(atIndex);
-  if (local.length <= 3) {
-    return '***' + domain;
-  }
-  return local.substring(0, 3) + '***' + domain;
-}
 
 router.get('/:token', async (req, res) => {
   const { token } = req.params;
