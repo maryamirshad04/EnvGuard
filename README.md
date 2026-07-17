@@ -20,8 +20,9 @@ sharing with authenticated, role-based access control, organized by
   - [2. Clone and install](#2-clone-and-install)
   - [3. Set up Supabase](#3-set-up-supabase)
   - [4. Set up Mailjet](#4-set-up-mailjet)
-  - [5. Configure environment variables](#5-configure-environment-variables)
-  - [6. Run it locally](#6-run-it-locally)
+  - [5. Set up Google Cloud Setup](#5-Set-up-Google-Cloud-Setup)
+  - [6. Configure environment variables](#5-configure-environment-variables)
+  - [7. Run it locally](#6-run-it-locally)
 
 ---
 
