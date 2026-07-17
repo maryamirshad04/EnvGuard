@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import Modal from '@/components/Modal';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
 
 function EyeIcon() {
   return (
@@ -124,6 +125,19 @@ function SignupForm() {
     [email, password]
   );
 
+  async function handleGoogleCredential(credential) {
+    setError('');
+    setLoading(true);
+    try {
+      await api.googleLogin(credential);
+      router.push(redirect);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const handleSetup2fa = () => {
     setShow2faPrompt(false);
     router.push('/dashboard/settings?setup2fa=1');
@@ -148,7 +162,17 @@ function SignupForm() {
         <h1 className="mt-6 text-2xl font-semibold text-paper">Create your account</h1>
         <p className="mt-1 text-sm text-mist">Encrypt your first secret in under a minute.</p>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+        <div className="mt-6">
+          <GoogleSignInButton onCredential={handleGoogleCredential} onError={setError} />
+        </div>
+
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-line" />
+          <span className="text-xs text-mist">or</span>
+          <div className="h-px flex-1 bg-line" />
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="email" className="mb-1 block text-sm text-mist">
               Email

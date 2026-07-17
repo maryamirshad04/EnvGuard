@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
 
 function EyeIcon() {
   return (
@@ -90,6 +91,19 @@ function LoginForm() {
     }
   }
 
+  async function handleGoogleCredential(credential) {
+    setError('');
+    setLoading(true);
+    try {
+      await api.googleLogin(credential);
+      router.push(redirect);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink px-6">
       <div className="w-full max-w-sm rounded-sm border border-line bg-surface p-8">
@@ -107,7 +121,17 @@ function LoginForm() {
             <h1 className="mt-6 text-2xl font-semibold text-paper">Welcome back</h1>
             <p className="mt-1 text-sm text-mist">Log in to access your projects.</p>
 
-            <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            <div className="mt-6">
+              <GoogleSignInButton onCredential={handleGoogleCredential} onError={setError} />
+            </div>
+
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-line" />
+              <span className="text-xs text-mist">or</span>
+              <div className="h-px flex-1 bg-line" />
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="email" className="mb-1 block text-sm text-mist">
                   Email
@@ -123,9 +147,14 @@ function LoginForm() {
                 />
               </div>
               <div>
-                <label htmlFor="password" className="mb-1 block text-sm text-mist">
-                  Password
-                </label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label htmlFor="password" className="block text-sm text-mist">
+                    Password
+                  </label>
+                  <Link href="/forgot-password" className="text-xs text-signal hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <input
                     id="password"

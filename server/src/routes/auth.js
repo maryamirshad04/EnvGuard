@@ -1,14 +1,18 @@
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
+const { OAuth2Client } = require('google-auth-library');
 const supabase = require('../config/supabase');
 const requireAuth = require('../middleware/auth');
-const logger = require('../utils/logger'); 
+const logger = require('../utils/logger');
 const { maskEmail } = require('../utils/helpers');
+const { sendPasswordResetEmail } = require('../config/mailjet');
 
 const router = express.Router();
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -19,11 +23,36 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
 function issueSessionCookie(res, user) {
   const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
     expiresIn: '7d',
   });
   res.cookie('token', token, COOKIE_OPTIONS);
+}
+
+async function createDefaultCompany(userId) {
+  const { data: company, error: companyError } = await supabase
+    .from('companies')
+    .insert({ name: 'My Workspace', created_by: userId })
+    .select()
+    .single();
+
+  if (companyError) {
+    logger.error({ userId, error: companyError.message }, 'Failed to create default company');
+    return;
+  }
+
+  const { error: memberError } = await supabase
+    .from('company_members')
+    .insert({ company_id: company.id, user_id: userId, role: 'admin' });
+  if (memberError) {
+    logger.error(
+      { userId, companyId: company.id, error: memberError.message },
+      'Failed to add default company membership'
+    );
+  }
 }
 
 router.post('/signup', async (req, res) => {
@@ -63,22 +92,7 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
-  const { data: company, error: companyError } = await supabase
-    .from('companies')
-    .insert({ name: 'My Workspace', created_by: data.id })
-    .select()
-    .single();
-
-  if (companyError) {
-    logger.error({ userId: data.id, error: companyError.message }, 'Failed to create default company');
-  } else {
-    const { error: memberError } = await supabase
-      .from('company_members')
-      .insert({ company_id: company.id, user_id: data.id, role: 'admin' });
-    if (memberError) {
-      logger.error({ userId: data.id, companyId: company.id, error: memberError.message }, 'Failed to add default company membership');
-    }
-  }
+  await createDefaultCompany(data.id);
 
   issueSessionCookie(res, data);
   logger.info({ userId: data.id, email: maskedEmail }, 'User signed up successfully');
@@ -106,14 +120,17 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  if (!user.password_hash) {
+    logger.warn({ userId: user.id, email: maskedEmail }, 'Login failed - Google-only account');
+    return res.status(401).json({ error: 'This account signs in with Google. Use "Continue with Google" below.' });
+  }
+
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
     logger.warn({ userId: user.id, email: maskedEmail }, 'Login failed - invalid password');
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // If 2FA is on, don't issue the real session yet - hand back a short-lived
-  // token that only proves "password already checked", scoped to nothing else.
   if (user.two_factor_enabled) {
     const tempToken = jwt.sign(
       { userId: user.id, purpose: '2fa-pending' },
@@ -172,6 +189,158 @@ router.post('/login/2fa', async (req, res) => {
   res.json({ user: { id: user.id, email: user.email } });
 });
 
+// --- Google OAuth ------------------------------------------------------------
+
+router.post('/google', async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) {
+    return res.status(400).json({ error: 'Missing Google credential' });
+  }
+
+  let payload;
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch (err) {
+    logger.warn({ error: err.message }, 'Google token verification failed');
+    return res.status(401).json({ error: 'Could not verify Google sign-in' });
+  }
+
+  if (!payload?.email_verified) {
+    return res.status(401).json({ error: 'Google account email is not verified' });
+  }
+
+  const email = payload.email;
+  const googleId = payload.sub;
+  const maskedEmail = maskEmail(email);
+
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('id, email, google_id')
+    .eq('email', email)
+    .single();
+
+  let user;
+  if (existingUser) {
+    user = existingUser;
+    if (!existingUser.google_id) {
+      // Same email signed up with a password before - link the Google account.
+      await supabase.from('users').update({ google_id: googleId }).eq('id', existingUser.id);
+    }
+  } else {
+    const { data: created, error } = await supabase
+      .from('users')
+      .insert({ email, google_id: googleId, password_hash: null })
+      .select('id, email')
+      .single();
+
+    if (error) {
+      logger.error({ email: maskedEmail, error: error.message }, 'Google signup Supabase insert error');
+      return res.status(500).json({ error: error.message });
+    }
+    user = created;
+    await createDefaultCompany(user.id);
+    logger.info({ userId: user.id, email: maskedEmail }, 'New user created via Google sign-in');
+  }
+
+  // Google's own sign-in is treated as sufficient - app-level 2FA is skipped here.
+  issueSessionCookie(res, { id: user.id, email: user.email });
+  logger.info({ userId: user.id, email: maskedEmail }, 'User signed in via Google');
+  res.json({ user: { id: user.id, email: user.email } });
+});
+
+// --- Password reset -----------------------------------------------------------
+
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  const maskedEmail = maskEmail(email);
+  logger.info({ email: maskedEmail }, 'Password reset requested');
+
+  const genericResponse = { message: 'If that email has an account, a reset link has been sent.' };
+
+  if (!email?.trim()) return res.json(genericResponse);
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, email, password_hash')
+    .eq('email', email.trim())
+    .single();
+
+  if (!user || !user.password_hash) {
+    // No account, or a Google-only account with no password to reset.
+    logger.info({ email: maskedEmail }, 'Password reset - no resettable account (silent)');
+    return res.json(genericResponse);
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
+
+  const { error } = await supabase
+    .from('users')
+    .update({ reset_token_hash: tokenHash, reset_token_expires: expiresAt.toISOString() })
+    .eq('id', user.id);
+
+  if (error) {
+    logger.error({ userId: user.id, error: error.message }, 'Password reset token save error');
+    return res.json(genericResponse);
+  }
+
+  const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
+  try {
+    await sendPasswordResetEmail({ toEmail: user.email, resetLink });
+    logger.info({ userId: user.id, email: maskedEmail }, 'Password reset email sent');
+  } catch (mailError) {
+    logger.error({ userId: user.id, error: mailError.message }, 'Password reset email failed to send');
+  }
+
+  res.json(genericResponse);
+});
+
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Missing token or new password' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, reset_token_expires')
+    .eq('reset_token_hash', tokenHash)
+    .single();
+
+  if (error || !user) {
+    logger.warn('Password reset - invalid token');
+    return res.status(400).json({ error: 'This reset link is invalid. Request a new one.' });
+  }
+  if (new Date(user.reset_token_expires) < new Date()) {
+    logger.warn({ userId: user.id }, 'Password reset - expired token');
+    return res.status(400).json({ error: 'This reset link has expired. Request a new one.' });
+  }
+
+  const password_hash = await bcrypt.hash(password, 10);
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ password_hash, reset_token_hash: null, reset_token_expires: null })
+    .eq('id', user.id);
+
+  if (updateError) {
+    logger.error({ userId: user.id, error: updateError.message }, 'Password reset update error');
+    return res.status(500).json({ error: updateError.message });
+  }
+
+  logger.info({ userId: user.id, email: maskEmail(user.email) }, 'Password reset successful');
+  res.json({ message: 'Password updated. You can now log in.' });
+});
+
 router.post('/logout', (req, res) => {
   res.clearCookie('token', COOKIE_OPTIONS);
   logger.info({ ip: req.ip }, 'User logged out');
@@ -186,7 +355,10 @@ router.get('/me', requireAuth, (req, res) => {
 router.patch('/email', requireAuth, async (req, res) => {
   const { email } = req.body;
   const newEmailMasked = maskEmail(email);
-  logger.info({ userId: req.user.userId, currentEmail: maskEmail(req.user.email), newEmail: newEmailMasked }, 'Email update request');
+  logger.info(
+    { userId: req.user.userId, currentEmail: maskEmail(req.user.email), newEmail: newEmailMasked },
+    'Email update request'
+  );
 
   if (!email?.trim()) {
     logger.warn({ userId: req.user.userId }, 'Email update missing email');
@@ -224,7 +396,7 @@ router.get('/2fa/status', requireAuth, async (req, res) => {
   logger.info({ userId: req.user.userId }, '2FA status check');
   const { data, error } = await supabase
     .from('users')
-    .select('two_factor_enabled')
+    .select('two_factor_enabled, two_factor_prompted')
     .eq('id', req.user.userId)
     .single();
 
@@ -232,7 +404,17 @@ router.get('/2fa/status', requireAuth, async (req, res) => {
     logger.error({ userId: req.user.userId, error: error.message }, '2FA status Supabase error');
     return res.status(500).json({ error: error.message });
   }
-  res.json({ enabled: !!data.two_factor_enabled });
+  res.json({ enabled: !!data.two_factor_enabled, prompted: !!data.two_factor_prompted });
+});
+
+router.post('/2fa/dismiss-prompt', requireAuth, async (req, res) => {
+  const { error } = await supabase
+    .from('users')
+    .update({ two_factor_prompted: true })
+    .eq('id', req.user.userId);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ prompted: true });
 });
 
 router.post('/2fa/setup', requireAuth, async (req, res) => {

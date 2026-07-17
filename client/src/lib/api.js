@@ -25,6 +25,12 @@ export const api = {
     request('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ tempToken, code }) }),
   updateEmail: (email) =>
     request('/api/auth/email', { method: 'PATCH', body: JSON.stringify({ email }) }),
+  googleLogin: (credential) =>
+    request('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  forgotPassword: (email) =>
+    request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token, password) =>
+    request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
 
   twoFactor: {
     status: () => request('/api/auth/2fa/status'),
@@ -32,6 +38,7 @@ export const api = {
     verify: (code) => request('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
     disable: (password) =>
       request('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ password }) }),
+    dismissPrompt: () => request('/api/auth/2fa/dismiss-prompt', { method: 'POST' }),
   },
 
   companies: {

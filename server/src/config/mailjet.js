@@ -67,3 +67,26 @@ async function sendInviteEmail({ toEmail, companyName, role, inviteLink, invited
 }
 
 module.exports = { sendInviteEmail };
+
+async function sendPasswordResetEmail({ toEmail, resetLink }) {
+  await mailjet.post('send', { version: 'v3.1' }).request({
+    Messages: [
+      {
+        From: { Email: process.env.MAILJET_SENDER_EMAIL, Name: 'EnvGuard' },
+        To: [{ Email: toEmail }],
+        Subject: 'Reset your EnvGuard password',
+        TextPart:
+          `We received a request to reset your EnvGuard password.\n\n` +
+          `Reset it here: ${resetLink}\n\n` +
+          `This link expires in 1 hour. If you didn't request this, you can ignore this email.`,
+        HTMLPart: `
+          <p>We received a request to reset your EnvGuard password.</p>
+          <p><a href="${resetLink}">Reset your password</a></p>
+          <p style="color:#888;font-size:12px;">This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
+        `,
+      },
+    ],
+  });
+}
+
+module.exports.sendPasswordResetEmail = sendPasswordResetEmail;

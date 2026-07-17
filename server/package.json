@@ -20,7 +20,8 @@
     "node-mailjet": "^6.0.11",
     "otplib": "^12.0.1",
     "pino": "^10.3.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "google-auth-library": "^9.14.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
