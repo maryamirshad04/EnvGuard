@@ -42,6 +42,8 @@ EnvGuard replaces that with:
 
 - Email/password auth with JWT sessions (httpOnly cookies)
 - Optional two-factor authentication (TOTP, Google Authenticator / Authy / Microsoft Authenticator compatible), toggled from Settings, with a one-time onboarding prompt after signup
+- OAuth (Google cloud) toggled on signup/login where user clicks "Continue with Google". Google asks for permission. Google confirms the user's identityand using an OAuth token logs the user in.
+- Forget Password recovery mechanism through link sent on email.
 - Company creation + team invites via email (Mailjet), with rename/delete for companies and projects
 - Admin vs. member roles, enforced server-side on every request
 - Project → environment → variable hierarchy
@@ -62,7 +64,7 @@ EnvGuard replaces that with:
 | Frontend   | Next.js, React, Tailwind CSS |
 | Backend    | Node.js, Express |
 | Database   | Supabase (Postgres) |
-| Auth       | JWT (httpOnly cookies), bcrypt, TOTP via `otplib` |
+| Auth       | JWT (httpOnly cookies), bcrypt, TOTP via `otplib`, google-auth-library |
 | Encryption | AES-256-GCM (Node `crypto`), TLS in transit |
 | Email      | Mailjet (team invite emails) |
 | Logging    | Pino |
@@ -87,6 +89,7 @@ User
 - [Node.js](https://nodejs.org/) 18+ and npm
 - A free [Supabase](https://supabase.com) account
 - A free [Mailjet](https://www.mailjet.com) account (for invite emails)
+- A free [Google Cloud](https://console.cloud.google.com) account (for OAuth)
 
 ### 2. Clone and install
 
@@ -112,7 +115,14 @@ cd ../client && npm install
 2. Verify a sender: **Account → Sender domains & addresses → Add a sender address.** This becomes `MAILJET_SENDER_EMAIL`.
 3. Go to **Account Settings → API Key Management**. Copy the **API Key** and **Secret Key** — these are `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
 
-### 5. Configure environment variables
+### 5. Set up Google Cloud Setup
+1. Sign up at [ console.cloud.google.com](https://console.cloud.google.com) (the free tier is enough for development).
+2. Verify a sender: **APIs & Services → OAuth consent screen → set it up.** External, Add your app name/email.
+3. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**. Application type: Web application.
+4. Under **Authorized JavaScript origins**. Add both: (local dev), your real client URL.
+5. Copy the **Client ID**. Gives `GOOGLE_CLIENT_ID` & `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
+
+### 6. Configure environment variables
 
 Copy the example files and fill in the values from steps 3 and 4:
 
@@ -138,7 +148,7 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 6. Run it locally
+### 7. Run it locally
 
 In one terminal:
 ```bash

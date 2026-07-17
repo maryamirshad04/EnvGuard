@@ -139,3 +139,11 @@ alter table invites
 alter table users
   add column if not exists two_factor_enabled boolean not null default false,
   add column if not exists two_factor_secret text;
+
+alter table users alter column password_hash drop not null;
+alter table users
+  add column if not exists google_id text unique,
+  add column if not exists reset_token_hash text,
+  add column if not exists reset_token_expires timestamptz;
+create index if not exists idx_users_google_id on users(google_id);
+create index if not exists idx_users_reset_token_hash on users(reset_token_hash);
