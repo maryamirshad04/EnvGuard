@@ -9,7 +9,7 @@ const supabase = require('../config/supabase');
 const requireAuth = require('../middleware/auth');
 const logger = require('../utils/logger');
 const { maskEmail } = require('../utils/helpers');
-const { sendPasswordResetEmail } = require('../config/mailjet');
+const { sendPasswordResetEmail, sendVerificationEmail } = require('../config/mailjet');
 
 const router = express.Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -23,7 +23,8 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
-const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
+const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 function issueSessionCookie(res, user) {
   const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
@@ -81,9 +82,9 @@ router.post('/signup', async (req, res) => {
   }
 
   const password_hash = await bcrypt.hash(password, 10);
-  const { data, error } = await supabase
+  const { data: user, error } = await supabase
     .from('users')
-    .insert({ email, password_hash })
+    .insert({ email, password_hash, email_verified: false })
     .select('id, email')
     .single();
 
@@ -92,13 +93,134 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
-  await createDefaultCompany(data.id);
+  // generate verification token
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS);
 
-  issueSessionCookie(res, data);
-  logger.info({ userId: data.id, email: maskedEmail }, 'User signed up successfully');
-  res.status(201).json({ user: data });
+  const { error: tokenError } = await supabase
+    .from('users')
+    .update({
+      verification_token_hash: tokenHash,
+      verification_token_expires: expiresAt.toISOString(),
+    })
+    .eq('id', user.id);
+
+  if (tokenError) {
+    logger.error({ userId: user.id, error: tokenError.message }, 'Failed to save verification token');
+  }
+
+  // send verification email
+  const verificationLink = `${process.env.CLIENT_URL}/verify-email/${token}`;
+  try {
+    await sendVerificationEmail({ toEmail: user.email, verificationLink });
+    logger.info({ userId: user.id, email: maskedEmail }, 'Verification email sent');
+  } catch (mailError) {
+    logger.error({ userId: user.id, error: mailError.message }, 'Failed to send verification email');
+  }
+
+  await createDefaultCompany(user.id);
+
+  logger.info({ userId: user.id, email: maskedEmail }, 'User signed up, verification email sent');
+  res.status(201).json({
+    message: 'Account created. Please verify your email address. Check your inbox for a verification link.',
+    email: user.email,
+  });
 });
 
+// --- VERIFY EMAIL  ---
+router.get('/verify-email/:token', async (req, res) => {
+  const { token } = req.params;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, email_verified, verification_token_expires')
+    .eq('verification_token_hash', tokenHash)
+    .single();
+
+  if (error || !user) {
+    return res.status(400).json({ error: 'Invalid verification link.' });
+  }
+
+  if (user.email_verified) {
+    issueSessionCookie(res, { id: user.id, email: user.email });
+    return res.json({ message: 'Email already verified. You are now logged in.' });
+  }
+
+  if (new Date(user.verification_token_expires) < new Date()) {
+    return res.status(400).json({ error: 'Verification link has expired. Request a new one.' });
+  }
+
+  // Mark as verified, keep token fields for idempotency
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ email_verified: true })
+    .eq('id', user.id);
+
+  if (updateError) {
+    return res.status(500).json({ error: 'Could not verify email. Please try again.' });
+  }
+
+  issueSessionCookie(res, { id: user.id, email: user.email });
+  res.json({ message: 'Email verified successfully. You are now logged in.' });
+});
+
+// --- RESEND VERIFICATION ---
+router.post('/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  const maskedEmail = maskEmail(email);
+  logger.info({ email: maskedEmail }, 'Resend verification requested');
+
+  if (!email?.trim()) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, email_verified')
+    .eq('email', email.trim())
+    .single();
+
+  if (error || !user) {
+    logger.info({ email: maskedEmail }, 'Resend verification - user not found');
+    return res.status(404).json({ error: 'No account found with that email.' });
+  }
+
+  if (user.email_verified) {
+    return res.json({ message: 'This email is already verified. You can log in.' });
+  }
+
+  // Generate new token
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS);
+
+  const { error: tokenError } = await supabase
+    .from('users')
+    .update({
+      verification_token_hash: tokenHash,
+      verification_token_expires: expiresAt.toISOString(),
+    })
+    .eq('id', user.id);
+
+  if (tokenError) {
+    logger.error({ userId: user.id, error: tokenError.message }, 'Failed to update verification token');
+    return res.status(500).json({ error: 'Could not send verification email. Please try again later.' });
+  }
+
+  const verificationLink = `${process.env.CLIENT_URL}/verify-email/${token}`;
+  try {
+    await sendVerificationEmail({ toEmail: user.email, verificationLink });
+    logger.info({ userId: user.id, email: maskedEmail }, 'Verification email resent');
+    res.json({ message: 'Verification email sent. Check your inbox.' });
+  } catch (mailError) {
+    logger.error({ userId: user.id, error: mailError.message }, 'Failed to send verification email');
+    res.status(500).json({ error: 'Could not send email. Please try again later.' });
+  }
+});
+
+// --- LOGIN (with email_verified check) ---
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   const maskedEmail = maskEmail(email);
@@ -118,6 +240,14 @@ router.post('/login', async (req, res) => {
   if (error || !user) {
     logger.warn({ email: maskedEmail }, 'Login failed - user not found');
     return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  if (!user.email_verified) {
+    logger.warn({ userId: user.id, email: maskedEmail }, 'Login blocked - email not verified');
+    return res.status(403).json({
+      error: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+      needsVerification: true,
+    });
   }
 
   if (!user.password_hash) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -51,12 +51,25 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/dashboard';
+  const show2faParam = searchParams.get('show2fa');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
   const [show2faPrompt, setShow2faPrompt] = useState(false);
+
+  // If we land here with ?show2fa=1, automatically open the 2FA modal
+  useEffect(() => {
+    if (show2faParam === '1') {
+      setShow2faPrompt(true);
+      // Optionally show a welcome message
+    }
+  }, [show2faParam]);
 
   function validateEmail(email) {
     if (!email.includes('@')) {
@@ -115,7 +128,8 @@ function SignupForm() {
 
       try {
         await api.signup(email, password);
-        setShow2faPrompt(true);
+        // Instead of showing 2FA prompt, show verification message
+        setVerificationSent(true);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -148,6 +162,63 @@ function SignupForm() {
     router.push(redirect);
   };
 
+  const handleResendVerification = useCallback(async () => {
+    setResending(true);
+    setResendMessage('');
+    setError('');
+    try {
+      await api.resendVerification(email);
+      setResendMessage('Verification email resent. Check your inbox.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResending(false);
+    }
+  }, [email]);
+
+  // If verification was just sent, show the verification message
+  if (verificationSent) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-ink px-6">
+        <div className="w-full max-w-sm rounded-sm border border-line bg-surface p-8 text-center">
+          <Link href="/" className="font-mono text-sm text-signal">
+            <img
+              src="/lock.svg"
+              alt="Envguard icon"
+              className="inline-block h-5 w-5 text-signal align-middle"
+            />{' '}
+            <span className="align-middle">envguard</span>
+          </Link>
+          <h1 className="mt-6 text-xl font-semibold text-paper">Check your email</h1>
+          <p className="mt-2 text-sm text-mist">
+            We sent a verification link to <strong>{email}</strong>.
+            Click the link to verify your account and complete signup.
+          </p>
+          {resendMessage && (
+            <p className="mt-3 text-sm text-signal">{resendMessage}</p>
+          )}
+          {error && (
+            <p className="mt-3 text-sm text-alert">{error}</p>
+          )}
+          <button
+            onClick={handleResendVerification}
+            disabled={resending}
+            className="mt-4 text-sm text-signal hover:underline disabled:opacity-50"
+          >
+            {resending ? 'Sending...' : "Didn't get the email? Resend"}
+          </button>
+          <p className="mt-6 text-sm text-mist">
+            Already verified?{' '}
+            <Link href="/login" className="text-signal hover:underline">
+              Log in
+            </Link>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // Normal signup form (also shown when returning from verification with show2fa param)
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink px-6">
       <div className="w-full max-w-sm rounded-sm border border-line bg-surface p-8">
@@ -236,7 +307,7 @@ function SignupForm() {
         </p>
       </div>
 
-      {/* 2FA Onboarding Modal */}
+      {/* 2FA Onboarding Modal – now shown after email verification */}
       <Modal open={show2faPrompt} onClose={handleSkip2fa} title="Secure your account">
         <div className="space-y-4">
           <p className="text-sm text-mist">
