@@ -1,16 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
 import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import Pagination from '@/components/Pagination';
+
+const PAGE_SIZE = 9;
 
 export default function DashboardPage() {
   const router = useRouter();
   const { companies, refreshCompanies } = useDashboard();
+
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -22,6 +28,21 @@ export default function DashboardPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editError, setEditError] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return companies;
+    return companies.filter((c) => c.name.toLowerCase().includes(q));
+  }, [companies, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paginated = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+
+  function handleSearchChange(value) {
+    setSearch(value);
+    setPage(1);
+  }
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -101,49 +122,65 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {companies.length > 0 && (
+        <input
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Search teams..."
+          className="mt-6 w-full max-w-sm rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+        />
+      )}
+
       {companies.length === 0 ? (
         <div className="mt-8 rounded-sm border border-dashed border-line p-10 text-center">
           <p className="font-mono text-sm text-mist">No Team yet.</p>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="mt-8 rounded-sm border border-dashed border-line p-10 text-center">
+          <p className="font-mono text-sm text-mist">No teams match &ldquo;{search}&rdquo;.</p>
+        </div>
       ) : (
-        <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-  {companies.map((c) => (
-    <li key={c.id} className="relative">
-      <Link
-        href={`/dashboard/${c.id}`}
-        className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
-      >
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-xs uppercase tracking-wider text-signal">Team</p>
-          <span
-            className={`rounded-sm px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
-              c.role === 'admin' ? 'bg-signal/15 text-signal' : 'border border-line text-mist'
-            }`}
-          >
-            {c.role}
-          </span>
-        </div>
-        
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <h3 className="truncate text-lg font-medium text-paper">{c.name}</h3>
-          {c.role === 'admin' && (
-            <button
-              onClick={(e) => openEdit(e, c)}
-              aria-label={`Edit ${c.name}`}
-              className="flex-shrink-0 text-mist hover:text-paper"
-            >
-              &#9998;
-            </button>
-          )}
-        </div>
-        
-        <p className="mt-1 text-xs text-mist">
-          Created {new Date(c.created_at).toLocaleDateString()}
-        </p>
-      </Link>
-    </li>
-  ))}
-</ul>
+        <>
+          <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {paginated.map((c) => (
+              <li key={c.id} className="relative">
+                <Link
+                  href={`/dashboard/${c.id}`}
+                  className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-mono text-xs uppercase tracking-wider text-signal">Team</p>
+                    <span
+                      className={`rounded-sm px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
+                        c.role === 'admin' ? 'bg-signal/15 text-signal' : 'border border-line text-mist'
+                      }`}
+                    >
+                      {c.role}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <h3 className="truncate text-lg font-medium text-paper">{c.name}</h3>
+                    {c.role === 'admin' && (
+                      <button
+                        onClick={(e) => openEdit(e, c)}
+                        aria-label={`Edit ${c.name}`}
+                        className="flex-shrink-0 text-mist hover:text-paper"
+                      >
+                        &#9998;
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-xs text-mist">
+                    Created {new Date(c.created_at).toLocaleDateString()}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Pagination page={pageSafe} totalPages={totalPages} onChange={setPage} />
+        </>
       )}
 
       <Modal open={creating} onClose={() => setCreating(false)} title="New company">

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import Pagination from '@/components/Pagination';
 import { ProjectSkeleton } from '@/components/Skeleton';
 
 const ENV_COLORS = {
@@ -13,6 +14,8 @@ const ENV_COLORS = {
   staging: 'bg-amber-400',
   production: 'bg-alert',
 };
+
+const VARS_PAGE_SIZE = 10;
 
 function envDotColor(name) {
   return ENV_COLORS[name] || 'bg-mist';
@@ -109,6 +112,11 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
+  // --- search / filter / pagination for the variables list ---
+  const [varSearch, setVarSearch] = useState('');
+  const [varFilter, setVarFilter] = useState('all'); // all | protected | plain
+  const [varPage, setVarPage] = useState(1);
+
   const [addEnvOpen, setAddEnvOpen] = useState(false);
   const [newEnvName, setNewEnvName] = useState('');
   const [addEnvSubmitting, setAddEnvSubmitting] = useState(false);
@@ -189,12 +197,47 @@ export default function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, projectId]);
+
+  // Filtered + paginated view over the currently loaded variables list -
+  // everything here is client-side since the whole environment's variables
+  // are already fetched in one request.
+  const filteredVariables = useMemo(() => {
+    let list = variables;
+    if (varFilter === 'protected') list = list.filter((v) => v.is_secret !== false);
+    if (varFilter === 'plain') list = list.filter((v) => v.is_secret === false);
+
+    const q = varSearch.trim().toLowerCase();
+    if (q) list = list.filter((v) => v.key.toLowerCase().includes(q));
+
+    return list;
+  }, [variables, varFilter, varSearch]);
+
+  const varTotalPages = Math.max(1, Math.ceil(filteredVariables.length / VARS_PAGE_SIZE));
+  const varPageSafe = Math.min(varPage, varTotalPages);
+  const paginatedVariables = filteredVariables.slice(
+    (varPageSafe - 1) * VARS_PAGE_SIZE,
+    varPageSafe * VARS_PAGE_SIZE
+  );
+
+  function handleVarSearchChange(value) {
+    setVarSearch(value);
+    setVarPage(1);
+  }
+
+  function handleVarFilterChange(value) {
+    setVarFilter(value);
+    setVarPage(1);
+  }
 
   async function handleSwitchEnv(envId) {
     setActiveEnvId(envId);
     setRevealed({});
     setError('');
+    setVarSearch('');
+    setVarFilter('all');
+    setVarPage(1);
     await loadVariables(envId);
   }
 
@@ -344,17 +387,18 @@ export default function ProjectDetailPage() {
   }
 
   async function handleCopyAll() {
-    await navigator.clipboard.writeText(toEnvFormat(variables));
+    // Copies everything currently matching the search/filter, not just the visible page.
+    await navigator.clipboard.writeText(toEnvFormat(filteredVariables));
     setNotice('Copied all as .env format');
     setTimeout(() => setNotice(''), 2000);
   }
 
   function handleDownloadEnv() {
-    downloadText(`${activeEnv?.name || 'env'}.env`, toEnvFormat(variables));
+    downloadText(`${activeEnv?.name || 'env'}.env`, toEnvFormat(filteredVariables));
   }
 
   function handleDownloadCsv() {
-    downloadText(`${activeEnv?.name || 'env'}.csv`, toCsvFormat(variables));
+    downloadText(`${activeEnv?.name || 'env'}.csv`, toCsvFormat(filteredVariables));
   }
 
   // --- Generate Share Link ---
@@ -525,6 +569,27 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
+      {/* Search + filter for the variables list */}
+      {hasVariables && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <input
+            value={varSearch}
+            onChange={(e) => handleVarSearchChange(e.target.value)}
+            placeholder="Search by key..."
+            className="w-full max-w-xs rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+          />
+          <select
+            value={varFilter}
+            onChange={(e) => handleVarFilterChange(e.target.value)}
+            className="rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+          >
+            <option value="all">All</option>
+            <option value="protected">Protected only</option>
+            <option value="plain">Plain only</option>
+          </select>
+        </div>
+      )}
+
       {/* Variables list */}
       <div className="mt-4">
         {varsLoading ? (
@@ -537,56 +602,65 @@ export default function ProjectDetailPage() {
           <div className="rounded-sm border border-dashed border-line p-10 text-center">
             <p className="font-mono text-sm text-mist">No variables in this environment yet.</p>
           </div>
+        ) : filteredVariables.length === 0 ? (
+          <div className="rounded-sm border border-dashed border-line p-10 text-center">
+            <p className="font-mono text-sm text-mist">No variables match your search/filter.</p>
+          </div>
         ) : (
-          <ul className="divide-y divide-line rounded-sm border border-line bg-surface">
-            {variables.map((v) => {
-              const isSecret = v.is_secret !== false;
-              return (
-                <li
-                  key={v.id}
-                  className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-sm text-paper">{v.key}</p>
-                      <span
-                        className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
-                          isSecret ? 'border border-line text-mist' : 'bg-signal/15 text-signal'
-                        }`}
-                      >
-                        {isSecret ? 'protected' : 'plain'}
-                      </span>
+          <>
+            <ul className="divide-y divide-line rounded-sm border border-line bg-surface">
+              {paginatedVariables.map((v) => {
+                const isSecret = v.is_secret !== false;
+                return (
+                  <li
+                    key={v.id}
+                    className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono text-sm text-paper">{v.key}</p>
+                        <span
+                          className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
+                            isSecret ? 'border border-line text-mist' : 'bg-signal/15 text-signal'
+                          }`}
+                        >
+                          {isSecret ? 'protected' : 'plain'}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate font-mono text-sm text-mist">
+                        {!isSecret || revealed[v.id]
+                          ? v.value
+                          : '\u2022'.repeat(Math.min(v.value.length, 24))}
+                      </p>
                     </div>
-                    <p className="mt-1 truncate font-mono text-sm text-mist">
-                      {!isSecret || revealed[v.id] ? v.value : '\u2022'.repeat(Math.min(v.value.length, 24))}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {isSecret && (
+                    <div className="flex shrink-0 items-center gap-2">
+                      {isSecret && (
+                        <button
+                          onClick={() => toggleReveal(v.id)}
+                          className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
+                        >
+                          {revealed[v.id] ? 'Hide' : 'Reveal'}
+                        </button>
+                      )}
                       <button
-                        onClick={() => toggleReveal(v.id)}
+                        onClick={() => handleCopy(v.id, v.value)}
                         className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
                       >
-                        {revealed[v.id] ? 'Hide' : 'Reveal'}
+                        {copiedId === v.id ? 'Copied' : 'Copy'}
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleCopy(v.id, v.value)}
-                      className="rounded-sm border border-line px-3 py-1.5 text-xs text-mist hover:border-signal/40 hover:text-paper"
-                    >
-                      {copiedId === v.id ? 'Copied' : 'Copy'}
-                    </button>
-                    <button
-                      onClick={() => setDeletingVar(v)}
-                      className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                      <button
+                        onClick={() => setDeletingVar(v)}
+                        className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <Pagination page={varPageSafe} totalPages={varTotalPages} onChange={setVarPage} />
+          </>
         )}
       </div>
 

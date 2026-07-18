@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import Pagination from '@/components/Pagination';
 import { CardGridSkeleton, Skeleton } from '@/components/Skeleton';
+
+const PROJECTS_PAGE_SIZE = 9;
 
 export default function CompanyDetailPage() {
   const { companyId } = useParams();
@@ -20,6 +23,8 @@ export default function CompanyDetailPage() {
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectPage, setProjectPage] = useState(1);
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [creatingSubmitting, setCreatingSubmitting] = useState(false);
@@ -31,10 +36,12 @@ export default function CompanyDetailPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const [members, setMembers] = useState([]);
+  const [memberSearch, setMemberSearch] = useState('');
   const [invites, setInvites] = useState([]);
   const [teamLoaded, setTeamLoaded] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
+  const [inviteRoleFilter, setInviteRoleFilter] = useState('all');
   const [inviteWarning, setInviteWarning] = useState('');
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
 
@@ -83,6 +90,35 @@ export default function CompanyDetailPage() {
       })
       .catch((err) => setError(err.message));
   }, [tab, teamLoaded, companyId, company]);
+
+  const filteredProjects = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [projects, projectSearch]);
+
+  const projectTotalPages = Math.max(1, Math.ceil(filteredProjects.length / PROJECTS_PAGE_SIZE));
+  const projectPageSafe = Math.min(projectPage, projectTotalPages);
+  const paginatedProjects = filteredProjects.slice(
+    (projectPageSafe - 1) * PROJECTS_PAGE_SIZE,
+    projectPageSafe * PROJECTS_PAGE_SIZE
+  );
+
+  function handleProjectSearchChange(value) {
+    setProjectSearch(value);
+    setProjectPage(1);
+  }
+
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((m) => m.email.toLowerCase().includes(q));
+  }, [members, memberSearch]);
+
+  const filteredInvites = useMemo(() => {
+    if (inviteRoleFilter === 'all') return invites;
+    return invites.filter((inv) => inv.role === inviteRoleFilter);
+  }, [invites, inviteRoleFilter]);
 
   async function handleCreateProject(e) {
     e.preventDefault();
@@ -221,7 +257,17 @@ export default function CompanyDetailPage() {
 
       {tab === 'projects' && (
         <div className="mt-6">
-          <div className="flex items-center justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {projects.length > 0 ? (
+              <input
+                value={projectSearch}
+                onChange={(e) => handleProjectSearchChange(e.target.value)}
+                placeholder="Search projects..."
+                className="w-full max-w-xs rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+              />
+            ) : (
+              <div />
+            )}
             <button
               onClick={() => {
                 setError('');
@@ -240,30 +286,37 @@ export default function CompanyDetailPage() {
             <div className="mt-6 rounded-sm border border-dashed border-line p-10 text-center">
               <p className="font-mono text-sm text-mist">No projects yet.</p>
             </div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="mt-6 rounded-sm border border-dashed border-line p-10 text-center">
+              <p className="font-mono text-sm text-mist">No projects match &ldquo;{projectSearch}&rdquo;.</p>
+            </div>
           ) : (
-            <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.map((p) => (
-                <li key={p.id} className="relative">
-                  <Link
-                    href={`/dashboard/${companyId}/projects/${p.id}`}
-                    className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
-                  >
-                    <p className="font-mono text-xs uppercase tracking-wider text-signal">Project</p>
-                    <h3 className="mt-2 truncate pr-6 text-lg font-medium text-paper">{p.name}</h3>
-                    <p className="mt-1 text-xs text-mist">
-                      Created {new Date(p.created_at).toLocaleDateString()}
-                    </p>
-                  </Link>
-                  <button
-                    onClick={(e) => openEdit(e, p)}
-                    aria-label={`Edit ${p.name}`}
-                    className="absolute right-4 top-4 text-mist hover:text-paper"
-                  >
-                    &#9998;
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {paginatedProjects.map((p) => (
+                  <li key={p.id} className="relative">
+                    <Link
+                      href={`/dashboard/${companyId}/projects/${p.id}`}
+                      className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
+                    >
+                      <p className="font-mono text-xs uppercase tracking-wider text-signal">Project</p>
+                      <h3 className="mt-2 truncate pr-6 text-lg font-medium text-paper">{p.name}</h3>
+                      <p className="mt-1 text-xs text-mist">
+                        Created {new Date(p.created_at).toLocaleDateString()}
+                      </p>
+                    </Link>
+                    <button
+                      onClick={(e) => openEdit(e, p)}
+                      aria-label={`Edit ${p.name}`}
+                      className="absolute right-4 top-4 text-mist hover:text-paper"
+                    >
+                      &#9998;
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <Pagination page={projectPageSafe} totalPages={projectTotalPages} onChange={setProjectPage} />
+            </>
           )}
         </div>
       )}
@@ -314,42 +367,71 @@ export default function CompanyDetailPage() {
 
           {isAdmin && invites.length > 0 && (
             <div>
-              <h2 className="text-sm font-medium text-paper">Pending invites</h2>
-              <ul className="mt-3 divide-y divide-line rounded-sm border border-line bg-surface">
-                {invites.map((inv) => (
-                  <li key={inv.id} className="flex items-center justify-between p-3">
-                    <div>
-                      <p className="text-sm text-paper">{inv.email}</p>
-                      <p className="font-mono text-xs uppercase tracking-wide text-mist">{inv.role}</p>
-                    </div>
-                    <button
-                      onClick={() => handleRevoke(inv.id)}
-                      className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
-                    >
-                      Revoke
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-paper">Pending invites</h2>
+                <select
+                  value={inviteRoleFilter}
+                  onChange={(e) => setInviteRoleFilter(e.target.value)}
+                  className="rounded-sm border border-line bg-surface px-2 py-1 text-xs text-paper outline-none focus:border-signal"
+                >
+                  <option value="all">All roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="member">Member</option>
+                </select>
+              </div>
+              {filteredInvites.length === 0 ? (
+                <p className="mt-3 font-mono text-xs text-mist">No invites match that filter.</p>
+              ) : (
+                <ul className="mt-3 divide-y divide-line rounded-sm border border-line bg-surface">
+                  {filteredInvites.map((inv) => (
+                    <li key={inv.id} className="flex items-center justify-between p-3">
+                      <div>
+                        <p className="text-sm text-paper">{inv.email}</p>
+                        <p className="font-mono text-xs uppercase tracking-wide text-mist">{inv.role}</p>
+                      </div>
+                      <button
+                        onClick={() => handleRevoke(inv.id)}
+                        className="rounded-sm border border-line px-3 py-1.5 text-xs text-alert hover:border-alert/60"
+                      >
+                        Revoke
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
           <div>
-            <h2 className="text-sm font-medium text-paper">Members</h2>
-            <ul className="mt-3 divide-y divide-line rounded-sm border border-line bg-surface">
-              {members.map((m) => (
-                <li key={m.id} className="flex items-center justify-between p-3">
-                  <p className="text-sm text-paper">{m.email}</p>
-                  <span
-                    className={`rounded-sm px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
-                      m.role === 'admin' ? 'bg-signal/15 text-signal' : 'border border-line text-mist'
-                    }`}
-                  >
-                    {m.role}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-paper">Members</h2>
+              {members.length > 5 && (
+                <input
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                  placeholder="Search members..."
+                  className="w-48 rounded-sm border border-line bg-surface px-2 py-1 text-xs text-paper outline-none focus:border-signal"
+                />
+              )}
+            </div>
+            {filteredMembers.length === 0 ? (
+              <p className="mt-3 font-mono text-xs text-mist">No members match &ldquo;{memberSearch}&rdquo;.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-line rounded-sm border border-line bg-surface">
+                {filteredMembers.map((m) => (
+                  <li key={m.id} className="flex items-center justify-between p-3">
+                    <p className="text-sm text-paper">{m.email}</p>
+                    <span
+                      className={`rounded-sm px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
+                        m.role === 'admin' ? 'bg-signal/15 text-signal' : 'border border-line text-mist'
+                      }`}
+                    >
+                      {m.role}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
