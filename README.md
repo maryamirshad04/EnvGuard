@@ -42,6 +42,7 @@ EnvGuard replaces that with:
 ## Features
 
 - Email/password auth with JWT sessions (httpOnly cookies)
+- Signup email verification as well as forgot/reset password functionality
 - Optional two-factor authentication (TOTP, Google Authenticator / Authy / Microsoft Authenticator compatible), toggled from Settings, with a one-time onboarding prompt after signup
 - OAuth (Google cloud) toggled on signup/login where user clicks "Continue with Google". Google asks for permission. Google confirms the user's identityand using an OAuth token logs the user in.
 - Forget Password recovery mechanism through link sent on email.
