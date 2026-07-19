@@ -8,6 +8,8 @@ import { useDashboard } from '@/lib/DashboardContext';
 import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
 import Pagination from '@/components/Pagination';
+import Alert from '@/components/Alert';
+import SearchInput from '@/components/SearchInput';
 
 const PAGE_SIZE = 9;
 
@@ -123,11 +125,11 @@ export default function DashboardPage() {
       </div>
 
       {companies.length > 0 && (
-        <input
+        <SearchInput
           value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
+          onChange={handleSearchChange}
           placeholder="Search teams..."
-          className="mt-6 w-full max-w-sm rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+          className="mt-6 w-full max-w-sm"
         />
       )}
 
@@ -183,6 +185,7 @@ export default function DashboardPage() {
         </>
       )}
 
+      {/* Create Modal */}
       <Modal open={creating} onClose={() => setCreating(false)} title="New company">
         <form onSubmit={handleCreate} className="space-y-3" autoComplete="off">
           <input
@@ -190,10 +193,11 @@ export default function DashboardPage() {
             autoComplete="off"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+            onFocus={() => setError('')}
             placeholder="Company name"
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
-          {error && <p className="text-sm text-alert">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
           <button
             disabled={submitting}
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
@@ -204,6 +208,7 @@ export default function DashboardPage() {
         </form>
       </Modal>
 
+      {/* Edit Modal */}
       <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Team">
         <form onSubmit={handleRename} className="space-y-3" autoComplete="off">
           <input
@@ -211,9 +216,10 @@ export default function DashboardPage() {
             autoComplete="off"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
+            onFocus={() => setEditError('')}
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
-          {editError && <p className="text-sm text-alert">{editError}</p>}
+          {editError && <Alert variant="error">{editError}</Alert>}
           <button
             disabled={editSubmitting}
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
@@ -225,11 +231,10 @@ export default function DashboardPage() {
 
         <div className="mt-6 border-t border-line pt-4">
           {confirmingDelete ? (
-            <div className="space-y-2">
-              <p className="text-sm text-alert">
-                Delete &ldquo;{editing?.name}&rdquo; permanently, including all its projects,
-                environments, and variables? This can&apos;t be undone.
-              </p>
+            <div className="space-y-3">
+              <Alert variant="warning" title={`Delete "${editing?.name}"?`}>
+                This includes all its projects, environments, and variables. This can&apos;t be undone.
+              </Alert>
               <div className="flex gap-2">
                 <button
                   onClick={handleDelete}

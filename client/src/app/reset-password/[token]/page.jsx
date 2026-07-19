@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import Alert from '@/components/Alert';
 
 function EyeIcon() {
   return (
@@ -81,7 +82,11 @@ export default function ResetPasswordPage() {
         {done ? (
           <>
             <h1 className="mt-6 text-2xl font-semibold text-paper">Password updated</h1>
-            <p className="mt-2 text-sm text-mist">Redirecting you to log in...</p>
+            <div className="mt-4">
+              <Alert variant="success">
+                Your password has been reset successfully. Redirecting to login…
+              </Alert>
+            </div>
           </>
         ) : (
           <>
@@ -95,6 +100,7 @@ export default function ResetPasswordPage() {
                   autoFocus
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setError('')}
                   placeholder="New password"
                   className="w-full rounded-sm border border-line bg-ink px-3 py-2 pr-10 text-sm text-paper outline-none focus:border-signal"
                 />
@@ -112,11 +118,12 @@ export default function ResetPasswordPage() {
                 required
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
+                onFocus={() => setError('')}
                 placeholder="Confirm new password"
                 className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
               />
 
-              {error && <p className="text-sm text-alert">{error}</p>}
+              {error && <Alert variant="error">{error}</Alert>}
 
               <button
                 type="submit"

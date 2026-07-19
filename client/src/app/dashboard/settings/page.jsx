@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
 import Spinner from '@/components/Spinner';
+import Alert from '@/components/Alert';
 
 export default function SettingsPage() {
   return (
@@ -132,6 +133,7 @@ function SettingsContent() {
             autoComplete="off"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onFocus={() => setEmailError('')}
             className="flex-1 rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
           <button
@@ -142,8 +144,8 @@ function SettingsContent() {
             Save
           </button>
         </form>
-        {emailError && <p className="mt-2 text-sm text-alert">{emailError}</p>}
-        {emailNotice && <p className="mt-2 text-sm text-signal">{emailNotice}</p>}
+        {emailError && <Alert variant="error" className="mt-2">{emailError}</Alert>}
+        {emailNotice && <Alert variant="success" className="mt-2">{emailNotice}</Alert>}
       </section>
 
       {/* Two-factor authentication */}
@@ -175,9 +177,10 @@ function SettingsContent() {
                 autoComplete="off"
                 value={disablePassword}
                 onChange={(e) => setDisablePassword(e.target.value)}
+                onFocus={() => setDisableError('')}
                 className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
               />
-              {disableError && <p className="text-sm text-alert">{disableError}</p>}
+              {disableError && <Alert variant="error">{disableError}</Alert>}
               <div className="flex gap-2">
                 <button
                   disabled={disableSubmitting}
@@ -229,10 +232,11 @@ function SettingsContent() {
                     maxLength={6}
                     value={verifyCode}
                     onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                    onFocus={() => setVerifyError('')}
                     placeholder="123456"
                     className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-center font-mono text-lg tracking-[0.5em] text-paper outline-none focus:border-signal"
                   />
-                  {verifyError && <p className="text-sm text-alert">{verifyError}</p>}
+                  {verifyError && <Alert variant="error">{verifyError}</Alert>}
                   <div className="flex gap-2">
                     <button
                       disabled={verifySubmitting || verifyCode.length !== 6}

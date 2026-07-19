@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import Alert from '@/components/Alert';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -39,10 +40,12 @@ export default function ForgotPasswordPage() {
         {sent ? (
           <>
             <h1 className="mt-6 text-2xl font-semibold text-paper">Check your email</h1>
-            <p className="mt-2 text-sm text-mist">
-              If an account exists for <span className="text-paper">{email}</span>, a password
-              reset link is on its way. The link expires in 1 hour.
-            </p>
+            <div className="mt-2">
+              <Alert variant="success">
+                If an account exists for <span className="font-medium text-paper">{email}</span>, a password
+                reset link is on its way. The link expires in 1 hour.
+              </Alert>
+            </div>
           </>
         ) : (
           <>
@@ -58,11 +61,12 @@ export default function ForgotPasswordPage() {
                 autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onFocus={() => setError('')}
                 className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
                 placeholder="you@company.com"
               />
 
-              {error && <p className="text-sm text-alert">{error}</p>}
+              {error && <Alert variant="error">{error}</Alert>}
 
               <button
                 type="submit"

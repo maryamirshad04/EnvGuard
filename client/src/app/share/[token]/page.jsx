@@ -4,15 +4,18 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import Spinner from '@/components/Spinner';
+import Alert from '@/components/Alert';
 
 export default function SharedViewPage() {
   const { token } = useParams();
   const [variables, setVariables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [revealed, setRevealed] = useState({});
   const [copiedIdx, setCopiedIdx] = useState(null);
   const fetchedRef = useRef(false);
+  const successTimeout = useRef(null);
 
   useEffect(() => {
     if (fetchedRef.current) return;
@@ -31,6 +34,12 @@ export default function SharedViewPage() {
     fetchShared();
   }, [token]);
 
+  useEffect(() => {
+    return () => {
+      if (successTimeout.current) clearTimeout(successTimeout.current);
+    };
+  }, []);
+
   function toggleReveal(idx) {
     setRevealed((prev) => ({ ...prev, [idx]: !prev[idx] }));
   }
@@ -38,14 +47,24 @@ export default function SharedViewPage() {
   async function handleCopy(idx, value) {
     await navigator.clipboard.writeText(value);
     setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 1500);
+    setSuccess('Copied to clipboard');
+    if (successTimeout.current) clearTimeout(successTimeout.current);
+    successTimeout.current = setTimeout(() => {
+      setSuccess('');
+      setCopiedIdx(null);
+    }, 2000);
   }
 
   async function handleCopyAll() {
     const text = variables.map((v) => `${v.key}=${v.value}`).join('\n');
     await navigator.clipboard.writeText(text);
     setCopiedIdx('all');
-    setTimeout(() => setCopiedIdx(null), 1500);
+    setSuccess('All variables copied');
+    if (successTimeout.current) clearTimeout(successTimeout.current);
+    successTimeout.current = setTimeout(() => {
+      setSuccess('');
+      setCopiedIdx(null);
+    }, 2000);
   }
 
   if (loading) {
@@ -59,8 +78,7 @@ export default function SharedViewPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-        <h1 className="text-2xl font-semibold text-paper">Link unavailable</h1>
-        <p className="mt-4 text-mist">{error}</p>
+        <Alert variant="error">{error}</Alert>
       </div>
     );
   }
@@ -69,6 +87,12 @@ export default function SharedViewPage() {
     <div className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-paper">Shared environment variables</h1>
       <p className="mt-1 text-sm text-mist">This link was viewed once and cannot be viewed again.</p>
+
+      {success && (
+        <div className="mt-4">
+          <Alert variant="success">{success}</Alert>
+        </div>
+      )}
 
       {variables.length === 0 ? (
         <div className="mt-8 rounded-sm border border-dashed border-line p-10 text-center">

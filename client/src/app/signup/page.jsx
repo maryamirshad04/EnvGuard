@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import Modal from '@/components/Modal';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
+import Alert from '@/components/Alert';
+import Spinner from '@/components/Spinner';
 
 function EyeIcon() {
   return (
@@ -38,7 +40,7 @@ export default function SignupPage() {
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center bg-ink">
-          <p className="font-mono text-sm text-mist">Loading</p>
+          <Spinner className="h-8 w-8 text-signal" />
         </main>
       }
     >
@@ -63,17 +65,15 @@ function SignupForm() {
   const [resendMessage, setResendMessage] = useState('');
   const [show2faPrompt, setShow2faPrompt] = useState(false);
 
-  // If we land here with ?show2fa=1, automatically open the 2FA modal
   useEffect(() => {
     if (show2faParam === '1') {
       setShow2faPrompt(true);
-      // Optionally show a welcome message
     }
   }, [show2faParam]);
 
   function validateEmail(email) {
     if (!email.includes('@')) {
-      return 'Email must contain @ symbol';
+      return 'please include @ in the email address';
     }
 
     const parts = email.split('@');
@@ -93,19 +93,34 @@ function SignupForm() {
       return 'Password must be at least 8 characters long';
     }
     if (!/[A-Z]/.test(password)) {
-      return 'Password must contain at least one uppercase letter';
+      return 'Password must include at least one uppercase letter';
     }
     if (!/[a-z]/.test(password)) {
-      return 'Password must contain at least one lowercase letter';
+      return 'Password must include at least one lowercase letter';
     }
     if (!/\d/.test(password)) {
-      return 'Password must contain at least one number';
+      return 'Password must include at least one number';
     }
     if (!/[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>\/?]/.test(password)) {
-      return 'Password must contain at least one special character';
+      return 'Password must include at least one special character';
     }
     return null;
   }
+
+  // --- Real-time validation on blur ---
+  const handleEmailBlur = useCallback(() => {
+    if (email) {
+      const emailError = validateEmail(email);
+      setError(emailError || '');
+    }
+  }, [email]);
+
+  const handlePasswordBlur = useCallback(() => {
+    if (password) {
+      const passwordError = validatePassword(password);
+      setError(passwordError || '');
+    }
+  }, [password]);
 
   const handleSubmit = useCallback(
     async (e) => {
@@ -128,7 +143,6 @@ function SignupForm() {
 
       try {
         await api.signup(email, password);
-        // Instead of showing 2FA prompt, show verification message
         setVerificationSent(true);
       } catch (err) {
         setError(err.message);
@@ -176,7 +190,6 @@ function SignupForm() {
     }
   }, [email]);
 
-  // If verification was just sent, show the verification message
   if (verificationSent) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ink px-6">
@@ -194,17 +207,14 @@ function SignupForm() {
             We sent a verification link to <strong>{email}</strong>.
             Click the link to verify your account and complete signup.
           </p>
-          {resendMessage && (
-            <p className="mt-3 text-sm text-signal">{resendMessage}</p>
-          )}
-          {error && (
-            <p className="mt-3 text-sm text-alert">{error}</p>
-          )}
+          {resendMessage && <Alert variant="success" className="mt-3">{resendMessage}</Alert>}
+          {error && <Alert variant="error" className="mt-3">{error}</Alert>}
           <button
             onClick={handleResendVerification}
             disabled={resending}
-            className="mt-4 text-sm text-signal hover:underline disabled:opacity-50"
+            className="mt-4 inline-flex items-center gap-2 text-sm text-signal hover:underline disabled:opacity-50"
           >
+            {resending && <Spinner className="h-4 w-4" />}
             {resending ? 'Sending...' : "Didn't get the email? Resend"}
           </button>
           <p className="mt-6 text-sm text-mist">
@@ -218,7 +228,6 @@ function SignupForm() {
     );
   }
 
-  // Normal signup form (also shown when returning from verification with show2fa param)
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink px-6">
       <div className="w-full max-w-sm rounded-sm border border-line bg-surface p-8">
@@ -254,6 +263,8 @@ function SignupForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onFocus={() => setError('')}
+              onBlur={handleEmailBlur}
               className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
               placeholder="you@company.com"
             />
@@ -271,6 +282,8 @@ function SignupForm() {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setError('')}
+                onBlur={handlePasswordBlur}
                 className="w-full rounded-sm border border-line bg-ink px-3 py-2 pr-10 text-sm text-paper outline-none focus:border-signal"
                 placeholder="At least 8 characters"
               />
@@ -288,13 +301,14 @@ function SignupForm() {
             </p>
           </div>
 
-          {error && <p className="text-sm text-alert">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-50"
           >
+            {loading && <Spinner className="h-4 w-4" />}
             {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
@@ -307,7 +321,6 @@ function SignupForm() {
         </p>
       </div>
 
-      {/* 2FA Onboarding Modal – now shown after email verification */}
       <Modal open={show2faPrompt} onClose={handleSkip2fa} title="Secure your account">
         <div className="space-y-4">
           <p className="text-sm text-mist">

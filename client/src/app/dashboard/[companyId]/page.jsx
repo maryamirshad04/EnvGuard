@@ -8,6 +8,8 @@ import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
 import Pagination from '@/components/Pagination';
 import { CardGridSkeleton, Skeleton } from '@/components/Skeleton';
+import Alert from '@/components/Alert';
+import SearchInput from '@/components/SearchInput';
 
 const PROJECTS_PAGE_SIZE = 9;
 
@@ -43,6 +45,7 @@ export default function CompanyDetailPage() {
   const [inviteRole, setInviteRole] = useState('member');
   const [inviteRoleFilter, setInviteRoleFilter] = useState('all');
   const [inviteWarning, setInviteWarning] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
 
   useEffect(() => {
@@ -178,15 +181,23 @@ export default function CompanyDetailPage() {
 
   async function handleInvite(e) {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    const trimmedEmail = inviteEmail.trim();
+    if (!trimmedEmail) {
+      setInviteWarning('Please enter a valid email address.');
+      return;
+    }
     setError('');
     setInviteWarning('');
+    setInviteSuccess('');
     setInviteSubmitting(true);
     try {
-      const res = await api.companies.invites.create(companyId, inviteEmail.trim(), inviteRole);
+      const res = await api.companies.invites.create(companyId, trimmedEmail, inviteRole);
       setInvites((prev) => [res.invite, ...prev]);
       if (res.warning) setInviteWarning(res.warning);
+      setInviteSuccess(`Invite sent to ${trimmedEmail}`);
       setInviteEmail('');
+      // Clear success after a few seconds
+      setTimeout(() => setInviteSuccess(''), 3000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -253,17 +264,17 @@ export default function CompanyDetailPage() {
         </button>
       </div>
 
-      {error && <p className="mt-4 text-sm text-alert">{error}</p>}
+      {error && <Alert variant="error" className="mt-4">{error}</Alert>}
 
       {tab === 'projects' && (
         <div className="mt-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {projects.length > 0 ? (
-              <input
+              <SearchInput
                 value={projectSearch}
-                onChange={(e) => handleProjectSearchChange(e.target.value)}
+                onChange={handleProjectSearchChange}
                 placeholder="Search projects..."
-                className="w-full max-w-xs rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+                className="w-full max-w-xs"
               />
             ) : (
               <div />
@@ -338,6 +349,7 @@ export default function CompanyDetailPage() {
                     autoComplete="off"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
+                    onFocus={() => { setError(''); setInviteWarning(''); setInviteSuccess(''); }}
                     placeholder="teammate@company.com"
                     className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
                   />
@@ -361,7 +373,9 @@ export default function CompanyDetailPage() {
                   {inviteSubmitting ? 'Sending\u2026' : 'Send invite'}
                 </button>
               </form>
-              {inviteWarning && <p className="mt-2 text-xs text-alert">{inviteWarning}</p>}
+              {inviteSuccess && <Alert variant="success" className="mt-2">{inviteSuccess}</Alert>}
+              {inviteWarning && <Alert variant="warning" className="mt-2">{inviteWarning}</Alert>}
+              {error && <Alert variant="error" className="mt-2">{error}</Alert>}
             </div>
           )}
 
@@ -443,9 +457,11 @@ export default function CompanyDetailPage() {
             autoComplete="off"
             value={newProjectName}
             onChange={(e) => setNewProjectName(e.target.value)}
+            onFocus={() => setError('')}
             placeholder="Project name"
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
+          {error && <Alert variant="error">{error}</Alert>}
           <button
             disabled={creatingSubmitting}
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
@@ -463,9 +479,10 @@ export default function CompanyDetailPage() {
             autoComplete="off"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
+            onFocus={() => setEditError('')}
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
-          {editError && <p className="text-sm text-alert">{editError}</p>}
+          {editError && <Alert variant="error">{editError}</Alert>}
           <button
             disabled={editSubmitting}
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
@@ -477,11 +494,10 @@ export default function CompanyDetailPage() {
 
         <div className="mt-6 border-t border-line pt-4">
           {confirmingDelete ? (
-            <div className="space-y-2">
-              <p className="text-sm text-alert">
-                Delete &ldquo;{editing?.name}&rdquo; permanently, including all its environments and
-                variables? This can&apos;t be undone.
-              </p>
+            <div className="space-y-3">
+              <Alert variant="warning" title={`Delete "${editing?.name}"?`}>
+                This includes all its environments and variables. This can&apos;t be undone.
+              </Alert>
               <div className="flex gap-2">
                 <button
                   onClick={handleDelete}

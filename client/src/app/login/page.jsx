@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
+import Alert from '@/components/Alert';
+import Spinner from '@/components/Spinner';
 
 function EyeIcon() {
   return (
@@ -37,7 +39,7 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center bg-ink">
-          <p className="font-mono text-sm text-mist">Loading</p>
+          <Spinner className="h-8 w-8 text-signal" />
         </main>
       }
     >
@@ -142,6 +144,7 @@ function LoginForm() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setError('')}
                   className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
                   placeholder="you@company.com"
                 />
@@ -162,6 +165,7 @@ function LoginForm() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onFocus={() => setError('')}
                     className="w-full rounded-sm border border-line bg-ink px-3 py-2 pr-10 text-sm text-paper outline-none focus:border-signal"
                     placeholder="••••••••"
                   />
@@ -176,13 +180,14 @@ function LoginForm() {
                 </div>
               </div>
 
-              {error && <p className="text-sm text-alert">{error}</p>}
+              {error && <Alert variant="error">{error}</Alert>}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-50"
               >
+                {loading && <Spinner className="h-4 w-4" />}
                 {loading ? 'Logging in...' : 'Log in'}
               </button>
             </form>
@@ -208,17 +213,19 @@ function LoginForm() {
                 maxLength={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                onFocus={() => setError('')}
                 placeholder="123456"
                 className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-center font-mono text-lg tracking-[0.5em] text-paper outline-none focus:border-signal"
               />
 
-              {error && <p className="text-sm text-alert">{error}</p>}
+              {error && <Alert variant="error">{error}</Alert>}
 
               <button
                 type="submit"
                 disabled={loading || code.length !== 6}
-                className="w-full rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-50"
               >
+                {loading && <Spinner className="h-4 w-4" />}
                 {loading ? 'Verifying...' : 'Verify'}
               </button>
               <button

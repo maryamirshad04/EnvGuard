@@ -4,11 +4,13 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import Alert from '@/components/Alert';
+import Spinner from '@/components/Spinner';
 
 export default function VerifyEmailPage() {
   const { token } = useParams();
   const router = useRouter();
-  const [status, setStatus] = useState('loading'); // 'loading' | 'success' | 'error'
+  const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('');
   const [retryCount, setRetryCount] = useState(0);
   const hasCalled = useRef(false);
@@ -35,10 +37,8 @@ export default function VerifyEmailPage() {
     if (hasCalled.current) return;
     hasCalled.current = true;
     verify();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, router]);
 
-  // Manual retry handler
   const handleRetry = () => {
     setRetryCount((prev) => prev + 1);
     setStatus('loading');
@@ -60,12 +60,15 @@ export default function VerifyEmailPage() {
 
         {status === 'loading' && (
           <>
-            <h1 className="mt-6 text-xl font-semibold text-paper">Verifying your email...</h1>
-            <p className="mt-2 text-sm text-mist">Please wait a moment.</p>
+            <div className="mt-6 flex flex-col items-center">
+              <Spinner className="h-8 w-8 text-signal" />
+              <h1 className="mt-4 text-xl font-semibold text-paper">Verifying your email...</h1>
+              <p className="mt-2 text-sm text-mist">Please wait a moment.</p>
+            </div>
             {retryCount > 0 && (
-              <p className="mt-2 text-xs text-mist">
-                Retry attempt {retryCount}. If this takes too long, click the button below.
-              </p>
+              <Alert variant="warning" title={`Retry attempt ${retryCount}`} className="mt-4">
+                If this takes too long, click the button below.
+              </Alert>
             )}
             <button
               onClick={handleRetry}
@@ -79,7 +82,7 @@ export default function VerifyEmailPage() {
         {status === 'success' && (
           <>
             <h1 className="mt-6 text-xl font-semibold text-paper">Email verified!</h1>
-            <p className="mt-2 text-sm text-mist">{message}</p>
+            <Alert variant="success" className="mt-2">{message}</Alert>
             <p className="mt-2 text-sm text-mist">Redirecting you to set up 2FA...</p>
           </>
         )}
@@ -87,7 +90,7 @@ export default function VerifyEmailPage() {
         {status === 'error' && (
           <>
             <h1 className="mt-6 text-xl font-semibold text-paper">Verification failed</h1>
-            <p className="mt-2 text-sm text-alert">{message}</p>
+             <Alert variant="error" className="mt-2">{message}</Alert>
             <div className="mt-4 flex flex-col gap-2">
               <button
                 onClick={handleRetry}

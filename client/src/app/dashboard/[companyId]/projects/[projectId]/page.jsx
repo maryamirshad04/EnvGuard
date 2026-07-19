@@ -8,6 +8,8 @@ import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
 import Pagination from '@/components/Pagination';
 import { ProjectSkeleton } from '@/components/Skeleton';
+import Alert from '@/components/Alert';
+import SearchInput from '@/components/SearchInput';
 
 const ENV_COLORS = {
   development: 'bg-sky-400',
@@ -200,9 +202,6 @@ export default function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, projectId]);
 
-  // Filtered + paginated view over the currently loaded variables list -
-  // everything here is client-side since the whole environment's variables
-  // are already fetched in one request.
   const filteredVariables = useMemo(() => {
     let list = variables;
     if (varFilter === 'protected') list = list.filter((v) => v.is_secret !== false);
@@ -329,7 +328,7 @@ export default function ProjectDetailPage() {
     const existingKeys = new Set(variables.map((v) => v.key));
     const duplicatesWithExisting = parsed.filter((v) => existingKeys.has(v.key));
     if (duplicatesWithExisting.length > 0) {
-      setImportError(`Duplicate keys already exist. Delete them first.`);
+      setImportError('Duplicate keys already exist. Delete them first.');
       return;
     }
 
@@ -387,7 +386,6 @@ export default function ProjectDetailPage() {
   }
 
   async function handleCopyAll() {
-    // Copies everything currently matching the search/filter, not just the visible page.
     await navigator.clipboard.writeText(toEnvFormat(filteredVariables));
     setNotice('Copied all as .env format');
     setTimeout(() => setNotice(''), 2000);
@@ -507,8 +505,8 @@ export default function ProjectDetailPage() {
         </button>
       </div>
 
-      {error && <p className="mt-4 text-sm text-alert">{error}</p>}
-      {notice && <p className="mt-4 text-sm text-signal">{notice}</p>}
+      {error && <Alert variant="error" className="mt-4">{error}</Alert>}
+      {notice && <Alert variant="success" className="mt-4">{notice}</Alert>}
 
       {/* Toolbar */}
       <div className="mt-6 flex flex-wrap gap-2">
@@ -572,11 +570,11 @@ export default function ProjectDetailPage() {
       {/* Search + filter for the variables list */}
       {hasVariables && (
         <div className="mt-4 flex flex-wrap gap-2">
-          <input
+          <SearchInput
             value={varSearch}
-            onChange={(e) => handleVarSearchChange(e.target.value)}
+            onChange={handleVarSearchChange}
             placeholder="Search by key..."
-            className="w-full max-w-xs rounded-sm border border-line bg-surface px-3 py-2 text-sm text-paper outline-none focus:border-signal"
+            className="w-full max-w-xs"
           />
           <select
             value={varFilter}
@@ -672,6 +670,7 @@ export default function ProjectDetailPage() {
             autoComplete="off"
             value={newEnvName}
             onChange={(e) => setNewEnvName(e.target.value)}
+            onFocus={() => setError('')}
             placeholder="e.g. qa"
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-signal"
           />
@@ -688,7 +687,7 @@ export default function ProjectDetailPage() {
       {/* Add variable modal */}
       <Modal open={addVarOpen} onClose={() => setAddVarOpen(false)} title="Add variable">
         <form onSubmit={handleAddVariable} className="space-y-3" autoComplete="off">
-          {addVarError && <p className="text-sm text-alert">{addVarError}</p>}
+          {addVarError && <Alert variant="error">{addVarError}</Alert>}
           <div>
             <label className="mb-1 block text-xs text-mist">Key</label>
             <input
@@ -696,6 +695,7 @@ export default function ProjectDetailPage() {
               autoComplete="off"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
+              onFocus={() => setAddVarError('')}
               placeholder="DATABASE_URL"
               className="w-full rounded-sm border border-line bg-ink px-3 py-2 font-mono text-sm text-paper outline-none focus:border-signal"
             />
@@ -710,6 +710,7 @@ export default function ProjectDetailPage() {
                 data-1p-ignore
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
+                onFocus={() => setAddVarError('')}
                 placeholder="postgres://..."
                 style={showNewValue ? undefined : { WebkitTextSecurity: 'disc' }}
                 className="w-full rounded-sm border border-line bg-ink px-3 py-2 pr-10 font-mono text-sm text-paper outline-none focus:border-signal"
@@ -746,7 +747,7 @@ export default function ProjectDetailPage() {
       {/* Bulk import modal */}
       <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import .env">
         <form onSubmit={handleImport} className="space-y-3" autoComplete="off">
-          {importError && <p className="text-sm text-alert">{importError}</p>}
+          {importError && <Alert variant="error">{importError}</Alert>}
           <div>
             <label className="mb-1 block text-xs text-mist">Upload a file (optional)</label>
             <input
@@ -760,6 +761,7 @@ export default function ProjectDetailPage() {
           <textarea
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
+            onFocus={() => setImportError('')}
             rows={8}
             placeholder={'DATABASE_URL=postgres://...\nAPI_KEY=sk-...'}
             className="w-full rounded-sm border border-line bg-ink px-3 py-2 font-mono text-xs text-paper outline-none focus:border-signal"
@@ -785,10 +787,9 @@ export default function ProjectDetailPage() {
 
       {/* Delete variable confirmation */}
       <Modal open={!!deletingVar} onClose={() => setDeletingVar(null)} title="Delete variable">
-        <p className="text-sm text-alert">
-          Delete <span className="font-mono">{deletingVar?.key}</span> permanently? This can&apos;t be
-          undone.
-        </p>
+        <Alert variant="warning" title={`Delete "${deletingVar?.key}"?`}>
+          This can&apos;t be undone.
+        </Alert>
         <div className="mt-4 flex gap-2">
           <button
             onClick={handleConfirmDelete}
@@ -825,6 +826,7 @@ export default function ProjectDetailPage() {
                   onChange={() => {
                     setIsCustomExpiry(false);
                     setShareExpiryMinutes(opt.minutes);
+                    setShareError('');
                   }}
                   className="accent-signal"
                 />
@@ -837,7 +839,10 @@ export default function ProjectDetailPage() {
                 type="radio"
                 name="expiry"
                 checked={isCustomExpiry}
-                onChange={() => setIsCustomExpiry(true)}
+                onChange={() => {
+                  setIsCustomExpiry(true);
+                  setShareError('');
+                }}
                 className="accent-signal"
               />
               Custom
@@ -850,7 +855,11 @@ export default function ProjectDetailPage() {
                   min="1"
                   step="1"
                   value={customExpiryValue}
-                  onChange={(e) => setCustomExpiryValue(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    setCustomExpiryValue(parseFloat(e.target.value) || 0);
+                    setShareError('');
+                  }}
+                  onFocus={() => setShareError('')}
                   className="w-20 rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
                 />
                 <select
@@ -867,7 +876,7 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {shareError && <p className="text-sm text-alert">{shareError}</p>}
+          {shareError && <Alert variant="error">{shareError}</Alert>}
           <button
             disabled={generatingLink}
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
@@ -888,16 +897,16 @@ export default function ProjectDetailPage() {
             <input
               readOnly
               value={shareLink}
-              className="flex-1 bg-transparent px-2 py-1 text-sm text-paper outline-none"
+              className="min-w-0 flex-1 bg-transparent px-2 py-1 text-sm text-paper outline-none"
             />
             <button
               onClick={copyShareLink}
-              className="rounded-sm bg-signal px-3 py-1 text-sm font-medium text-ink hover:bg-signal/90"
+              className="whitespace-nowrap rounded-sm bg-signal px-3 py-1 text-sm font-medium text-ink hover:bg-signal/90"
             >
               Copy
             </button>
-            {shareCopied && <span className="animate-pulse text-xs text-signal">Copied!</span>}
           </div>
+          {shareCopied && <Alert variant="success" className="mt-2">Copied!</Alert>}
           <button
             onClick={() => setShowShareModal(false)}
             className="w-full rounded-sm border border-line py-2 text-sm text-mist hover:text-paper"
