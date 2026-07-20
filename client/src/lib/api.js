@@ -113,11 +113,11 @@ export const api = {
   },
 
   share: {
-    create: (companyId, projectId, environmentId, expiryMinutes = 60) =>
-      request('/api/share', {
-        method: 'POST',
-        body: JSON.stringify({ companyId, projectId, environmentId, expiryMinutes }),
-      }),
-    get: (token) => request(`/api/share/${token}`),
-  },
+  create: (companyId, projectId, environmentId, expiryMinutes = 60, variableKeys = null) =>
+    request('/api/share', {
+      method: 'POST',
+      body: JSON.stringify({ companyId, projectId, environmentId, expiryMinutes, variableKeys }),
+    }),
+  get: (token) => request(`/api/share/${token}`),
+},
 };

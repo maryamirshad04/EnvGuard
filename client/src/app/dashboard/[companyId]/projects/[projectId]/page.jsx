@@ -143,6 +143,7 @@ export default function ProjectDetailPage() {
   const [deletingVar, setDeletingVar] = useState(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
+  // Share link states
   const [shareExpiryOpen, setShareExpiryOpen] = useState(false);
   const [shareExpiryMinutes, setShareExpiryMinutes] = useState(60);
   const [customExpiryValue, setCustomExpiryValue] = useState(1);
@@ -153,6 +154,11 @@ export default function ProjectDetailPage() {
   const [shareLink, setShareLink] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+
+  // NEW: share step and variable selection
+  const [shareStep, setShareStep] = useState(1);
+  const [shareAll, setShareAll] = useState(true);
+  const [selectedKeys, setSelectedKeys] = useState([]);
 
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
@@ -438,7 +444,8 @@ export default function ProjectDetailPage() {
     setShareError('');
     setGeneratingLink(true);
     try {
-      const res = await api.share.create(companyId, projectId, activeEnvId, minutes);
+      const variableKeys = shareAll ? null : selectedKeys;
+      const res = await api.share.create(companyId, projectId, activeEnvId, minutes, variableKeys);
       setShareLink(res.url);
       setShareExpiryOpen(false);
       setShareCopied(false);
@@ -557,6 +564,10 @@ export default function ProjectDetailPage() {
                 setIsCustomExpiry(false);
                 setCustomExpiryValue(1);
                 setCustomExpiryUnit('hours');
+                // Reset selection state
+                setShareStep(1);
+                setShareAll(true);
+                setSelectedKeys([]);
                 setShareExpiryOpen(true);
               }}
               className="rounded-sm bg-signal px-3 py-1.5 text-xs font-medium text-ink hover:bg-signal/90"
@@ -808,83 +819,173 @@ export default function ProjectDetailPage() {
         </div>
       </Modal>
 
-      {/* Choose expiry modal */}
+      {/* Generate link modal (multi‑step) */}
       <Modal open={shareExpiryOpen} onClose={() => setShareExpiryOpen(false)} title="Generate link">
-        <form onSubmit={handleGenerateLink} className="space-y-3">
-          <p className="text-xs text-mist">
-            This link will show every variable in <span className="font-mono">{activeEnv?.name}</span>{' '}
-            one time, then stop working. Choose how long it stays valid if it&apos;s never opened.
-          </p>
+        {shareStep === 1 && (
+          <div className="space-y-4">
+            <p className="text-xs text-mist">
+              Choose which variables to include in the shareable link.
+            </p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-paper">
+                <input
+                  type="radio"
+                  name="shareScope"
+                  checked={shareAll}
+                  onChange={() => setShareAll(true)}
+                  className="accent-signal"
+                />
+                All variables in this environment
+              </label>
+              <label className="flex items-center gap-2 text-sm text-paper">
+                <input
+                  type="radio"
+                  name="shareScope"
+                  checked={!shareAll}
+                  onChange={() => setShareAll(false)}
+                  className="accent-signal"
+                />
+                Select specific variables
+              </label>
+            </div>
 
-          <div className="space-y-2">
-            {PRESET_EXPIRY.map((opt) => (
-              <label key={opt.minutes} className="flex items-center gap-2 text-sm text-paper">
+            {!shareAll && (
+              <div className="max-h-60 overflow-y-auto rounded-sm border border-line p-2">
+                {variables.length === 0 ? (
+                  <p className="text-sm text-mist">No variables to select.</p>
+                ) : (
+                  variables.map((v) => (
+                    <label key={v.id} className="flex items-center gap-2 py-1 text-sm text-paper">
+                      <input
+                        type="checkbox"
+                        checked={selectedKeys.includes(v.key)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedKeys((prev) => [...prev, v.key]);
+                          } else {
+                            setSelectedKeys((prev) => prev.filter((k) => k !== v.key));
+                          }
+                          setShareError('');
+                        }}
+                        className="accent-signal"
+                      />
+                      <span className="font-mono">{v.key}</span>
+                      <span className="ml-auto text-xs text-mist">
+                        {v.is_secret !== false ? 'protected' : 'plain'}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            )}
+
+            {shareError && <Alert variant="error">{shareError}</Alert>}
+
+            <button
+              onClick={() => {
+                if (!shareAll && selectedKeys.length === 0) {
+                  setShareError('Please select at least one variable.');
+                  return;
+                }
+                setShareStep(2);
+                setShareError('');
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90"
+            >
+              Next: Set expiry
+            </button>
+          </div>
+        )}
+
+        {shareStep === 2 && (
+          <form onSubmit={handleGenerateLink} className="space-y-3">
+            <p className="text-xs text-mist">
+              This link will show the selected variables one time, then stop working.
+            </p>
+
+            <div className="space-y-2">
+              {PRESET_EXPIRY.map((opt) => (
+                <label key={opt.minutes} className="flex items-center gap-2 text-sm text-paper">
+                  <input
+                    type="radio"
+                    name="expiry"
+                    checked={!isCustomExpiry && shareExpiryMinutes === opt.minutes}
+                    onChange={() => {
+                      setIsCustomExpiry(false);
+                      setShareExpiryMinutes(opt.minutes);
+                      setShareError('');
+                    }}
+                    className="accent-signal"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+
+              <label className="flex items-center gap-2 text-sm text-paper">
                 <input
                   type="radio"
                   name="expiry"
-                  checked={!isCustomExpiry && shareExpiryMinutes === opt.minutes}
+                  checked={isCustomExpiry}
                   onChange={() => {
-                    setIsCustomExpiry(false);
-                    setShareExpiryMinutes(opt.minutes);
+                    setIsCustomExpiry(true);
                     setShareError('');
                   }}
                   className="accent-signal"
                 />
-                {opt.label}
+                Custom
               </label>
-            ))}
 
-            <label className="flex items-center gap-2 text-sm text-paper">
-              <input
-                type="radio"
-                name="expiry"
-                checked={isCustomExpiry}
-                onChange={() => {
-                  setIsCustomExpiry(true);
+              {isCustomExpiry && (
+                <div className="ml-6 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={customExpiryValue}
+                    onChange={(e) => {
+                      setCustomExpiryValue(parseFloat(e.target.value) || 0);
+                      setShareError('');
+                    }}
+                    onFocus={() => setShareError('')}
+                    className="w-20 rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
+                  />
+                  <select
+                    value={customExpiryUnit}
+                    onChange={(e) => setCustomExpiryUnit(e.target.value)}
+                    className="rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
+                  >
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                  </select>
+                  <span className="text-xs text-mist">(5 min – 7 days)</span>
+                </div>
+              )}
+            </div>
+
+            {shareError && <Alert variant="error">{shareError}</Alert>}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShareStep(1);
                   setShareError('');
                 }}
-                className="accent-signal"
-              />
-              Custom
-            </label>
-
-            {isCustomExpiry && (
-              <div className="ml-6 flex items-center gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={customExpiryValue}
-                  onChange={(e) => {
-                    setCustomExpiryValue(parseFloat(e.target.value) || 0);
-                    setShareError('');
-                  }}
-                  onFocus={() => setShareError('')}
-                  className="w-20 rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
-                />
-                <select
-                  value={customExpiryUnit}
-                  onChange={(e) => setCustomExpiryUnit(e.target.value)}
-                  className="rounded-sm border border-line bg-ink px-2 py-1 text-sm text-paper outline-none focus:border-signal"
-                >
-                  <option value="minutes">minutes</option>
-                  <option value="hours">hours</option>
-                  <option value="days">days</option>
-                </select>
-                <span className="text-xs text-mist">(5 min &ndash; 7 days)</span>
-              </div>
-            )}
-          </div>
-
-          {shareError && <Alert variant="error">{shareError}</Alert>}
-          <button
-            disabled={generatingLink}
-            className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
-          >
-            {generatingLink && <Spinner className="h-4 w-4" />}
-            {generatingLink ? 'Generating\u2026' : 'Generate link'}
-          </button>
-        </form>
+                className="flex-1 rounded-sm border border-line py-2 text-sm text-mist hover:text-paper"
+              >
+                Back
+              </button>
+              <button
+                disabled={generatingLink}
+                className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
+              >
+                {generatingLink && <Spinner className="h-4 w-4" />}
+                {generatingLink ? 'Generating…' : 'Generate link'}
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Share link result modal */}

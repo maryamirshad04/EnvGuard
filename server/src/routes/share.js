@@ -52,38 +52,51 @@ async function getEnvironmentWithAccess(companyId, projectId, envId, userId) {
 }
 
 router.post('/share', requireAuth, async (req, res) => {
-  const { companyId, projectId, environmentId } = req.body;
+  const { companyId, projectId, environmentId, expiryMinutes = 60, variableKeys } = req.body;
   const userId = req.user.userId;
 
-  logger.info(
-    { userId, companyId, projectId, environmentId },
-    'Generating share link'
-  );
+  logger.info({ userId, companyId, projectId, environmentId, expiryMinutes, variableKeys }, 'Generating share link');
+
+  // Validate expiry
+  const minExpiry = 5;
+  const maxExpiry = 10080; // 7 days
+  if (expiryMinutes < minExpiry || expiryMinutes > maxExpiry) {
+    return res.status(400).json({ error: `Expiry must be between ${minExpiry} and ${maxExpiry} minutes` });
+  }
 
   if (!companyId || !projectId || !environmentId) {
-    logger.warn({ userId }, 'Missing required fields for share link');
     return res.status(400).json({ error: 'companyId, projectId, and environmentId are required' });
   }
 
   const env = await getEnvironmentWithAccess(companyId, projectId, environmentId, userId);
   if (!env) {
-    logger.warn({ userId, companyId, projectId, environmentId }, 'User does not have access to environment');
     return res.status(403).json({ error: 'You do not have access to this environment' });
   }
 
-  const { data: variables, error: varErr } = await supabase
+  // Fetch variables
+  let query = supabase
     .from('env_variables')
     .select('key, value_encrypted, is_secret')
     .eq('environment_id', env.id)
     .order('key');
+
+  // If specific keys requested, filter by them
+  if (Array.isArray(variableKeys) && variableKeys.length > 0) {
+    query = query.in('key', variableKeys);
+  }
+
+  const { data: variables, error: varErr } = await query;
 
   if (varErr) {
     logger.error({ userId, envId: env.id, error: varErr.message }, 'Failed to fetch variables for share');
     return res.status(500).json({ error: varErr.message });
   }
 
-  logger.debug({ userId, envId: env.id, count: variables.length }, `Fetched ${variables.length} variables`);
+  if (!variables || variables.length === 0) {
+    return res.status(400).json({ error: 'No variables to share' });
+  }
 
+  // Decrypt values
   const decryptedVars = variables.map(v => ({
     key: v.key,
     value: decrypt(v.value_encrypted),
@@ -94,7 +107,7 @@ router.post('/share', requireAuth, async (req, res) => {
   const encryptedPayload = encrypt(payload);
 
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
   const { data: link, error: insertErr } = await supabase
     .from('shared_links')
@@ -114,10 +127,7 @@ router.post('/share', requireAuth, async (req, res) => {
 
   const shareUrl = `${process.env.CLIENT_URL}/share/${token}`;
 
-  logger.info(
-    { userId, envId: env.id, token: token.substring(0, 8) + '...' },
-    'Share link generated successfully'
-  );
+  logger.info({ userId, envId: env.id, token: token.substring(0, 8) + '...' }, 'Share link generated');
   res.status(201).json({ url: shareUrl });
 });
 
