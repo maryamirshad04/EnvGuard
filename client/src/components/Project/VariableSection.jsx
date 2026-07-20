@@ -61,7 +61,7 @@ export default function VariableSection({
 }) {
   return (
     <>
-      {/* Toolbar */}
+      {/* Toolbar - already flex-wrap */}
       <div className="mt-6 flex flex-wrap gap-2">
         <button
           onClick={() => {
@@ -158,13 +158,15 @@ export default function VariableSection({
                 return (
                   <li
                     key={v.id}
-                    className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 p-4 overflow-hidden w-full sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-mono text-sm text-paper">{v.key}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-mono text-sm text-paper truncate max-w-[120px] sm:max-w-none">
+                          {v.key}
+                        </p>
                         <span
-                          className={`rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
+                          className={`shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
                             isSecret ? 'border border-line text-mist' : 'bg-signal/15 text-signal'
                           }`}
                         >
@@ -177,7 +179,7 @@ export default function VariableSection({
                           : '\u2022'.repeat(Math.min(v.value.length, 24))}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 mt-2 sm:mt-0">
                       {isSecret && (
                         <button
                           onClick={() => toggleReveal(v.id)}
