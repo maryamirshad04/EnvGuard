@@ -14,7 +14,7 @@ import SearchInput from '@/components/SearchInput';
 const PROJECTS_PAGE_SIZE = 9;
 
 export default function CompanyDetailPage() {
-  const { companyId } = useParams();
+  const { companySlug } = useParams();
   const router = useRouter();
 
   const [company, setCompany] = useState(null);
@@ -48,51 +48,72 @@ export default function CompanyDetailPage() {
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
 
+  // Load company – redirect if not found
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const res = await api.companies.get(companyId);
+        const res = await api.companies.get(companySlug);
         if (cancelled) return;
         setCompany(res.company);
+        setError('');
       } catch (err) {
-        router.push(err.message?.toLowerCase().includes('not found') ? '/dashboard' : '/login');
+        // If company not found, redirect to dashboard
+        if (err.message?.toLowerCase().includes('not found')) {
+          router.push('/dashboard');
+        } else {
+          setError(err.message);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, router]);
+    return () => { cancelled = true; };
+  }, [companySlug, router]);
 
+  // Load projects only if company exists
   useEffect(() => {
+    if (!company) return; // wait for company to load
     if (tab !== 'projects' || projectsLoaded) return;
     setProjectsLoading(true);
     api.companies.projects
-      .list(companyId)
+      .list(companySlug)
       .then((res) => {
         setProjects(res.projects || []);
         setProjectsLoaded(true);
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        // If projects fetch fails, treat as 404 and redirect
+        if (err.message?.toLowerCase().includes('not found')) {
+          router.push('/dashboard');
+        } else {
+          setError(err.message);
+        }
+      })
       .finally(() => setProjectsLoading(false));
-  }, [tab, projectsLoaded, companyId]);
+  }, [tab, projectsLoaded, companySlug, company, router]);
 
   useEffect(() => {
+    if (!company) return;
     if (tab !== 'team' || teamLoaded) return;
     Promise.all([
-      api.companies.members(companyId),
-      company?.role === 'admin' ? api.companies.invites.list(companyId) : Promise.resolve({ invites: [] }),
+      api.companies.members(companySlug),
+      company?.role === 'admin' ? api.companies.invites.list(companySlug) : Promise.resolve({ invites: [] }),
     ])
       .then(([membersRes, invitesRes]) => {
         setMembers(membersRes.members || []);
         setInvites(invitesRes.invites || []);
         setTeamLoaded(true);
       })
-      .catch((err) => setError(err.message));
-  }, [tab, teamLoaded, companyId, company]);
+      .catch((err) => {
+        if (err.message?.toLowerCase().includes('not found')) {
+          router.push('/dashboard');
+        } else {
+          setError(err.message);
+        }
+      });
+  }, [tab, teamLoaded, companySlug, company, router]);
 
   const filteredProjects = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
@@ -129,7 +150,7 @@ export default function CompanyDetailPage() {
     setError('');
     setCreatingSubmitting(true);
     try {
-      const { project } = await api.companies.projects.create(companyId, newProjectName.trim());
+      const { project } = await api.companies.projects.create(companySlug, newProjectName.trim());
       setProjects((prev) => [project, ...prev]);
       setNewProjectName('');
       setCreatingProject(false);
@@ -155,7 +176,11 @@ export default function CompanyDetailPage() {
     setEditError('');
     setEditSubmitting(true);
     try {
-      const { project } = await api.companies.projects.update(companyId, editing.id, editName.trim());
+      const { project } = await api.companies.projects.update(
+        companySlug,
+        editing.slug,
+        editName.trim()
+      );
       setProjects((prev) => prev.map((p) => (p.id === project.id ? project : p)));
       setEditing(null);
     } catch (err) {
@@ -169,7 +194,7 @@ export default function CompanyDetailPage() {
     setEditError('');
     setEditSubmitting(true);
     try {
-      await api.companies.projects.remove(companyId, editing.id);
+      await api.companies.projects.remove(companySlug, editing.slug);
       setProjects((prev) => prev.filter((p) => p.id !== editing.id));
       setEditing(null);
     } catch (err) {
@@ -191,12 +216,11 @@ export default function CompanyDetailPage() {
     setInviteSuccess('');
     setInviteSubmitting(true);
     try {
-      const res = await api.companies.invites.create(companyId, trimmedEmail, inviteRole);
+      const res = await api.companies.invites.create(companySlug, trimmedEmail, inviteRole);
       setInvites((prev) => [res.invite, ...prev]);
       if (res.warning) setInviteWarning(res.warning);
       setInviteSuccess(`Invite sent to ${trimmedEmail}`);
       setInviteEmail('');
-      // Clear success after a few seconds
       setTimeout(() => setInviteSuccess(''), 3000);
     } catch (err) {
       setError(err.message);
@@ -207,7 +231,7 @@ export default function CompanyDetailPage() {
 
   async function handleRevoke(inviteId) {
     try {
-      await api.companies.invites.revoke(companyId, inviteId);
+      await api.companies.invites.revoke(companySlug, inviteId);
       setInvites((prev) => prev.filter((i) => i.id !== inviteId));
     } catch (err) {
       setError(err.message);
@@ -307,7 +331,7 @@ export default function CompanyDetailPage() {
                 {paginatedProjects.map((p) => (
                   <li key={p.id} className="relative">
                     <Link
-                      href={`/dashboard/${companyId}/projects/${p.id}`}
+                      href={`/dashboard/${companySlug}/projects/${p.slug}`}
                       className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
                     >
                       <p className="font-mono text-xs uppercase tracking-wider text-signal">Project</p>
@@ -370,7 +394,7 @@ export default function CompanyDetailPage() {
                   className="flex items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
                 >
                   {inviteSubmitting && <Spinner className="h-4 w-4" />}
-                  {inviteSubmitting ? 'Sending\u2026' : 'Send invite'}
+                  {inviteSubmitting ? 'Sending…' : 'Send invite'}
                 </button>
               </form>
               {inviteSuccess && <Alert variant="success" className="mt-2">{inviteSuccess}</Alert>}
@@ -467,7 +491,7 @@ export default function CompanyDetailPage() {
             className="flex w-full items-center justify-center gap-2 rounded-sm bg-signal px-4 py-2 text-sm font-medium text-ink hover:bg-signal/90 disabled:opacity-60"
           >
             {creatingSubmitting && <Spinner className="h-4 w-4" />}
-            {creatingSubmitting ? 'Creating\u2026' : 'Create'}
+            {creatingSubmitting ? 'Creating…' : 'Create'}
           </button>
         </form>
       </Modal>

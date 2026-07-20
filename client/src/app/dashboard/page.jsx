@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const [editing, setEditing] = useState(null); // company object or null
+  const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editError, setEditError] = useState('');
@@ -56,7 +56,7 @@ export default function DashboardPage() {
       await refreshCompanies();
       setCreating(false);
       setNewName('');
-      router.push(`/dashboard/${company.id}`);
+      router.push(`/dashboard/${company.slug}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -79,7 +79,7 @@ export default function DashboardPage() {
     setEditError('');
     setEditSubmitting(true);
     try {
-      await api.companies.update(editing.id, editName.trim());
+      await api.companies.update(editing.slug, editName.trim());
       await refreshCompanies();
       setEditing(null);
     } catch (err) {
@@ -93,7 +93,7 @@ export default function DashboardPage() {
     setEditError('');
     setEditSubmitting(true);
     try {
-      await api.companies.remove(editing.id);
+      await api.companies.remove(editing.slug);
       await refreshCompanies();
       setEditing(null);
     } catch (err) {
@@ -145,9 +145,9 @@ export default function DashboardPage() {
         <>
           <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {paginated.map((c) => (
-              <li key={c.id} className="relative">
+              <li key={c.slug} className="relative">
                 <Link
-                  href={`/dashboard/${c.id}`}
+                  href={`/dashboard/${c.slug}`}
                   className="block rounded-sm border border-line bg-surface p-5 transition-colors hover:border-signal/40"
                 >
                   <div className="flex items-center justify-between">

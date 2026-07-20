@@ -1,5 +1,3 @@
-// lib/projectUtils.js
-
 export const ENV_COLORS = {
   development: 'bg-sky-400',
   staging: 'bg-amber-400',

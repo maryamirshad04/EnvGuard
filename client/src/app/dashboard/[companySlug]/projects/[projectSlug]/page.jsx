@@ -1,4 +1,3 @@
-// app/dashboard/[companyId]/projects/[projectId]/page.jsx
 'use client';
 
 import { useParams } from 'next/navigation';
@@ -11,7 +10,8 @@ import VariableSection from '@/components/Project/VariableSection';
 import ShareModal from '@/components/Project/ShareModal';
 
 export default function ProjectDetailPage() {
-  const { companyId, projectId } = useParams();
+  // Use slugs from the URL
+  const { companySlug, projectSlug } = useParams();
 
   const {
     project,
@@ -104,7 +104,7 @@ export default function ProjectDetailPage() {
     setSelectedKeys,
     handleGenerateLink,
     copyShareLink,
-  } = useProject(companyId, projectId);
+  } = useProject(companySlug, projectSlug);
 
   if (loading) {
     return (
@@ -118,7 +118,8 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
-      <Link href={`/dashboard/${companyId}`} className="text-sm text-mist hover:text-paper">
+      {/* Back link uses the company slug */}
+      <Link href={`/dashboard/${companySlug}`} className="text-sm text-mist hover:text-paper">
         &larr; {companyName || 'Back to company'}
       </Link>
 

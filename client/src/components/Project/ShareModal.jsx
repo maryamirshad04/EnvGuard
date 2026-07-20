@@ -1,4 +1,3 @@
-// components/Project/ShareModal.jsx
 'use client';
 
 import { PRESET_EXPIRY } from '@/lib/projectUtils';
@@ -36,7 +35,7 @@ export default function ShareModal({
 }) {
   return (
     <>
-      {/* Share link modal (multi‑step) */}
+      {/* Share link modal */}
       <Modal open={open} onClose={onClose} title="Generate link">
         {step === 1 && (
           <div className="space-y-4">
@@ -205,7 +204,7 @@ export default function ShareModal({
         )}
       </Modal>
 
-      {/* Share link result modal */}
+      {/* Share link */}
       <Modal open={showResult} onClose={() => setShowResult(false)} title="Shareable link">
         <div className="space-y-4">
           <p className="text-sm text-mist">

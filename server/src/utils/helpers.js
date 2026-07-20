@@ -1,3 +1,5 @@
+const supabase = require('../config/supabase');
+
 function maskEmail(email) {
   if (!email) return 'unknown';
   const atIndex = email.indexOf('@');
@@ -10,4 +12,34 @@ function maskEmail(email) {
   return local.substring(0, 3) + '***' + domain;
 }
 
-module.exports = { maskEmail };
+function slugify(text) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+}
+
+async function generateUniqueSlug(base, table, column = 'slug') {
+  const slug = slugify(base) || 'untitled';
+  let unique = slug;
+  let counter = 1;
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('id')
+      .eq(column, unique)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) break;
+    unique = `${slug}-${counter}`;
+    counter++;
+  }
+  return unique;
+}
+
+module.exports = { maskEmail, slugify, generateUniqueSlug };

@@ -27,7 +27,7 @@ function SettingsContent() {
   const [emailError, setEmailError] = useState('');
   const [emailNotice, setEmailNotice] = useState('');
 
-  const [twoFAEnabled, setTwoFAEnabled] = useState(null); // null = loading
+  const [twoFAEnabled, setTwoFAEnabled] = useState(null); 
   const [settingUp, setSettingUp] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [secret, setSecret] = useState('');
@@ -51,7 +51,6 @@ function SettingsContent() {
     if (searchParams.get('setup2fa') === '1' && twoFAEnabled === false && !settingUp) {
       startSetup();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [twoFAEnabled]);
 
   async function handleUpdateEmail(e) {

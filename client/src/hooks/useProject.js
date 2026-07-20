@@ -1,4 +1,3 @@
-// hooks/useProject.js
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -370,7 +369,7 @@ export function useProject(companyId, projectId) {
     varSearch,
     varFilter,
     varPage,
-    setVarPage,           // <-- now exported
+    setVarPage,           
     varTotalPages,
     varPageSafe,
     paginatedVariables,

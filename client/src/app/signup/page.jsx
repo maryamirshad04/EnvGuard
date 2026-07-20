@@ -107,7 +107,7 @@ function SignupForm() {
     return null;
   }
 
-  // --- Real-time validation on blur ---
+  // --- Real-time validation  ---
   const handleEmailBlur = useCallback(() => {
     if (email) {
       const emailError = validateEmail(email);

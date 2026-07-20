@@ -1,4 +1,3 @@
-// components/Project/VariableSection.jsx
 'use client';
 
 import { EyeIcon, EyeOffIcon } from '@/lib/projectUtils';
@@ -61,7 +60,7 @@ export default function VariableSection({
 }) {
   return (
     <>
-      {/* Toolbar - already flex-wrap */}
+      {/* Toolbar */}
       <div className="mt-6 flex flex-wrap gap-2">
         <button
           onClick={() => {

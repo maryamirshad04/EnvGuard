@@ -147,3 +147,36 @@ alter table users
   add column if not exists reset_token_expires timestamptz;
 create index if not exists idx_users_google_id on users(google_id);
 create index if not exists idx_users_reset_token_hash on users(reset_token_hash);
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT,
+  ADD COLUMN IF NOT EXISTS email_verification_expires TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_users_email_verification_token_hash 
+  ON users(email_verification_token_hash);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_prompted BOOLEAN DEFAULT FALSE;
+
+create table if not exists cli_auth_requests (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'expired')),
+  user_id uuid references users(id) on delete cascade,
+  token text,
+  expires_at timestamptz not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_cli_auth_requests_code on cli_auth_requests(code);
+
+ALTER TABLE companies ADD COLUMN slug TEXT UNIQUE;
+ALTER TABLE projects ADD COLUMN slug TEXT UNIQUE;
+
+CREATE INDEX idx_companies_slug ON companies(slug);
+CREATE INDEX idx_projects_slug ON projects(slug);
+
+SELECT id, name, slug FROM companies;
+SELECT id, name, slug FROM projects;
+
+SELECT id, name, slug FROM companies;

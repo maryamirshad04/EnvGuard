@@ -67,7 +67,6 @@ export default function InvitePage() {
     setAccepting(true);
     setError('');
 
-    // Validate email existence before checking format
     if (!invite || !invite.email || invite.email.trim() === '') {
       setError('Invite email is missing. Please contact the person who invited you.');
       setAccepting(false);

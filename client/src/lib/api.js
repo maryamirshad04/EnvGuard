@@ -48,60 +48,60 @@ export const api = {
   companies: {
     list: () => request('/api/companies'),
     create: (name) => request('/api/companies', { method: 'POST', body: JSON.stringify({ name }) }),
-    get: (companyId) => request(`/api/companies/${companyId}`),
-    update: (companyId, name) =>
-      request(`/api/companies/${companyId}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
-    remove: (companyId) => request(`/api/companies/${companyId}`, { method: 'DELETE' }),
-    members: (companyId) => request(`/api/companies/${companyId}/members`),
+    get: (companySlug) => request(`/api/companies/${companySlug}`),
+    update: (companySlug, name) =>
+      request(`/api/companies/${companySlug}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    remove: (companySlug) => request(`/api/companies/${companySlug}`, { method: 'DELETE' }),
+    members: (companySlug) => request(`/api/companies/${companySlug}/members`),
 
     invites: {
-      list: (companyId) => request(`/api/companies/${companyId}/invites`),
-      create: (companyId, email, role) =>
-        request(`/api/companies/${companyId}/invites`, {
+      list: (companySlug) => request(`/api/companies/${companySlug}/invites`),
+      create: (companySlug, email, role) =>
+        request(`/api/companies/${companySlug}/invites`, {
           method: 'POST',
           body: JSON.stringify({ email, role }),
         }),
-      revoke: (companyId, inviteId) =>
-        request(`/api/companies/${companyId}/invites/${inviteId}`, { method: 'DELETE' }),
+      revoke: (companySlug, inviteId) =>
+        request(`/api/companies/${companySlug}/invites/${inviteId}`, { method: 'DELETE' }),
     },
 
     projects: {
-      list: (companyId) => request(`/api/companies/${companyId}/projects`),
-      create: (companyId, name) =>
-        request(`/api/companies/${companyId}/projects`, { method: 'POST', body: JSON.stringify({ name }) }),
-      get: (companyId, projectId) => request(`/api/companies/${companyId}/projects/${projectId}`),
-      update: (companyId, projectId, name) =>
-        request(`/api/companies/${companyId}/projects/${projectId}`, {
+      list: (companySlug) => request(`/api/companies/${companySlug}/projects`),
+      create: (companySlug, name) =>
+        request(`/api/companies/${companySlug}/projects`, { method: 'POST', body: JSON.stringify({ name }) }),
+      get: (companySlug, projectSlug) => request(`/api/companies/${companySlug}/projects/${projectSlug}`),
+      update: (companySlug, projectSlug, name) =>
+        request(`/api/companies/${companySlug}/projects/${projectSlug}`, {
           method: 'PATCH',
           body: JSON.stringify({ name }),
         }),
-      remove: (companyId, projectId) =>
-        request(`/api/companies/${companyId}/projects/${projectId}`, { method: 'DELETE' }),
+      remove: (companySlug, projectSlug) =>
+        request(`/api/companies/${companySlug}/projects/${projectSlug}`, { method: 'DELETE' }),
 
-      createEnvironment: (companyId, projectId, name) =>
-        request(`/api/companies/${companyId}/projects/${projectId}/environments`, {
+      createEnvironment: (companySlug, projectSlug, name) =>
+        request(`/api/companies/${companySlug}/projects/${projectSlug}/environments`, {
           method: 'POST',
           body: JSON.stringify({ name }),
         }),
 
-      listVariables: (companyId, projectId, envId) =>
-        request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables`),
+      listVariables: (companySlug, projectSlug, envId) =>
+        request(`/api/companies/${companySlug}/projects/${projectSlug}/environments/${envId}/variables`),
 
-      upsertVariable: (companyId, projectId, envId, key, value, isSecret = true) =>
-        request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables`, {
+      upsertVariable: (companySlug, projectSlug, envId, key, value, isSecret = true) =>
+        request(`/api/companies/${companySlug}/projects/${projectSlug}/environments/${envId}/variables`, {
           method: 'POST',
           body: JSON.stringify({ key, value, is_secret: isSecret }),
         }),
 
-      importVariables: (companyId, projectId, envId, variables) =>
-        request(`/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables/bulk`, {
+      importVariables: (companySlug, projectSlug, envId, variables) =>
+        request(`/api/companies/${companySlug}/projects/${projectSlug}/environments/${envId}/variables/bulk`, {
           method: 'POST',
           body: JSON.stringify({ variables }),
         }),
 
-      deleteVariable: (companyId, projectId, envId, varId) =>
+      deleteVariable: (companySlug, projectSlug, envId, varId) =>
         request(
-          `/api/companies/${companyId}/projects/${projectId}/environments/${envId}/variables/${varId}`,
+          `/api/companies/${companySlug}/projects/${projectSlug}/environments/${envId}/variables/${varId}`,
           { method: 'DELETE' }
         ),
     },
@@ -113,11 +113,11 @@ export const api = {
   },
 
   share: {
-  create: (companyId, projectId, environmentId, expiryMinutes = 60, variableKeys = null) =>
-    request('/api/share', {
-      method: 'POST',
-      body: JSON.stringify({ companyId, projectId, environmentId, expiryMinutes, variableKeys }),
-    }),
-  get: (token) => request(`/api/share/${token}`),
-},
+    create: (companyId, projectId, environmentId, expiryMinutes = 60, variableKeys = null) =>
+      request('/api/share', {
+        method: 'POST',
+        body: JSON.stringify({ companyId, projectId, environmentId, expiryMinutes, variableKeys }),
+      }),
+    get: (token) => request(`/api/share/${token}`),
+  },
 };

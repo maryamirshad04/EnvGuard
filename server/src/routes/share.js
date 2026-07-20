@@ -2,24 +2,50 @@ const express = require('express');
 const crypto = require('crypto');
 const supabase = require('../config/supabase');
 const requireAuth = require('../middleware/auth');
-const { requireMember } = require('../middleware/companyAccess');
 const { encrypt, decrypt } = require('../utils/crypto');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
-async function getEnvironmentWithAccess(companyId, projectId, envId, userId) {
-  logger.debug({ companyId, projectId, envId, userId }, 'Checking environment access');
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+async function resolveCompanyId(identifier) {
+  if (UUID_RE.test(identifier)) {
+    return identifier;
+  }
+  const { data, error } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('slug', identifier)
+    .single();
+  if (error || !data) return null;
+  return data.id;
+}
+
+async function resolveProjectId(companyId, identifier) {
+  if (UUID_RE.test(identifier)) {
+    return identifier;
+  }
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('slug', identifier)
+    .single();
+  if (error || !data) return null;
+  return data.id;
+}
+
+async function getEnvironmentWithAccess(companyId, projectId, envId, userId) {
+  // 1. Check membership
   const { data: membership, error: memErr } = await supabase
     .from('company_members')
     .select('role')
     .eq('company_id', companyId)
     .eq('user_id', userId)
     .single();
-
   if (memErr || !membership) {
-    logger.debug({ companyId, userId, error: memErr?.message }, 'User not a member of company');
+    logger.debug({ companyId, userId }, 'User not a member');
     return null;
   }
 
@@ -29,9 +55,8 @@ async function getEnvironmentWithAccess(companyId, projectId, envId, userId) {
     .eq('id', projectId)
     .eq('company_id', companyId)
     .single();
-
   if (projErr || !project) {
-    logger.debug({ companyId, projectId, error: projErr?.message }, 'Project not found in company');
+    logger.debug({ companyId, projectId }, 'Project not found in company');
     return null;
   }
 
@@ -41,13 +66,11 @@ async function getEnvironmentWithAccess(companyId, projectId, envId, userId) {
     .eq('id', envId)
     .eq('project_id', project.id)
     .single();
-
   if (envErr || !env) {
-    logger.debug({ projectId, envId, error: envErr?.message }, 'Environment not found in project');
+    logger.debug({ projectId, envId }, 'Environment not found in project');
     return null;
   }
 
-  logger.debug({ envId, envName: env.name }, 'Environment access granted');
   return env;
 }
 
@@ -57,9 +80,8 @@ router.post('/share', requireAuth, async (req, res) => {
 
   logger.info({ userId, companyId, projectId, environmentId, expiryMinutes, variableKeys }, 'Generating share link');
 
-  // Validate expiry
   const minExpiry = 5;
-  const maxExpiry = 10080; // 7 days
+  const maxExpiry = 10080; 
   if (expiryMinutes < minExpiry || expiryMinutes > maxExpiry) {
     return res.status(400).json({ error: `Expiry must be between ${minExpiry} and ${maxExpiry} minutes` });
   }
@@ -68,12 +90,24 @@ router.post('/share', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'companyId, projectId, and environmentId are required' });
   }
 
-  const env = await getEnvironmentWithAccess(companyId, projectId, environmentId, userId);
+  const resolvedCompanyId = await resolveCompanyId(companyId);
+  if (!resolvedCompanyId) {
+    logger.warn({ userId, companyId }, 'Company not found');
+    return res.status(404).json({ error: 'Company not found' });
+  }
+
+  const resolvedProjectId = await resolveProjectId(resolvedCompanyId, projectId);
+  if (!resolvedProjectId) {
+    logger.warn({ userId, projectId }, 'Project not found in this company');
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const env = await getEnvironmentWithAccess(resolvedCompanyId, resolvedProjectId, environmentId, userId);
   if (!env) {
+    logger.warn({ userId, resolvedCompanyId, resolvedProjectId, environmentId }, 'No access to environment');
     return res.status(403).json({ error: 'You do not have access to this environment' });
   }
 
-  // Fetch variables
   let query = supabase
     .from('env_variables')
     .select('key, value_encrypted, is_secret')
@@ -85,9 +119,8 @@ router.post('/share', requireAuth, async (req, res) => {
   }
 
   const { data: variables, error: varErr } = await query;
-
   if (varErr) {
-    logger.error({ userId, envId: env.id, error: varErr.message }, 'Failed to fetch variables for share');
+    logger.error({ userId, envId: env.id, error: varErr.message }, 'Failed to fetch variables');
     return res.status(500).json({ error: varErr.message });
   }
 
@@ -95,7 +128,6 @@ router.post('/share', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'No variables to share' });
   }
 
-  // Decrypt values
   const decryptedVars = variables.map(v => ({
     key: v.key,
     value: decrypt(v.value_encrypted),
@@ -125,7 +157,6 @@ router.post('/share', requireAuth, async (req, res) => {
   }
 
   const shareUrl = `${process.env.CLIENT_URL}/share/${token}`;
-
   logger.info({ userId, envId: env.id, token: token.substring(0, 8) + '...' }, 'Share link generated');
   res.status(201).json({ url: shareUrl });
 });

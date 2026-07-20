@@ -11,7 +11,6 @@ export default function GoogleSignInButton({ onCredential, onError }) {
     const container = containerRef.current;
     if (!container || !window.google?.accounts?.id) return;
 
-    // Clear any previous button
     container.innerHTML = '';
     window.google.accounts.id.renderButton(container, {
       theme: 'outline',
@@ -21,7 +20,6 @@ export default function GoogleSignInButton({ onCredential, onError }) {
     });
   }, []);
 
-  // 1. Load the Google library and initialize only once
   useEffect(() => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!clientId) {
@@ -46,8 +44,6 @@ export default function GoogleSignInButton({ onCredential, onError }) {
         },
       });
 
-      // Render the button immediately after initialization
-      // Use the current desiredWidth (or default 320)
       renderButton(desiredWidth);
     };
 
@@ -63,11 +59,9 @@ export default function GoogleSignInButton({ onCredential, onError }) {
     }
 
     return () => {
-      // Optional cleanup: remove script if needed, but usually not
     };
   }, [onCredential, onError, renderButton, desiredWidth]);
 
-  // 2. Observe container size changes and re‑render with new width
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -76,7 +70,6 @@ export default function GoogleSignInButton({ onCredential, onError }) {
       const rect = container.getBoundingClientRect();
       const newWidth = Math.min(Math.max(rect.width - 16, 200), 400);
       setDesiredWidth(newWidth);
-      // If library is already ready, re‑render with new width
       if (window.google?.accounts?.id) {
         renderButton(newWidth);
       }
@@ -85,7 +78,6 @@ export default function GoogleSignInButton({ onCredential, onError }) {
     const resizeObserver = new ResizeObserver(updateWidth);
     resizeObserver.observe(container);
 
-    // Initial width after layout
     requestAnimationFrame(updateWidth);
 
     return () => resizeObserver.disconnect();

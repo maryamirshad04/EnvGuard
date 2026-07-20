@@ -1,4 +1,3 @@
-// components/Project/EnvironmentSection.jsx
 'use client';
 
 import { envDotColor } from '@/lib/projectUtils';
