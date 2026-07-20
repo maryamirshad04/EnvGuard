@@ -80,7 +80,6 @@ router.post('/share', requireAuth, async (req, res) => {
     .eq('environment_id', env.id)
     .order('key');
 
-  // If specific keys requested, filter by them
   if (Array.isArray(variableKeys) && variableKeys.length > 0) {
     query = query.in('key', variableKeys);
   }
@@ -148,7 +147,6 @@ router.get('/share/:token', async (req, res) => {
 
   if (new Date(link.expires_at) < new Date()) {
     logger.warn({ linkId: link.id, expiresAt: link.expires_at }, 'Shared link expired');
-    // Optionally delete expired links
     await supabase.from('shared_links').delete().eq('id', link.id);
     return res.status(410).json({ error: 'This link has expired' });
   }

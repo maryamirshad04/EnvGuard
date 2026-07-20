@@ -152,7 +152,6 @@ router.get('/verify-email/:token', async (req, res) => {
     return res.status(400).json({ error: 'Verification link has expired. Request a new one.' });
   }
 
-  // Mark as verified, keep token fields for idempotency
   const { error: updateError } = await supabase
     .from('users')
     .update({ email_verified: true })
@@ -376,7 +375,6 @@ router.post('/google', async (req, res) => {
     logger.info({ userId: user.id, email: maskedEmail }, 'New user created via Google sign-in');
   }
 
-  // Google's own sign-in is treated as sufficient - app-level 2FA is skipped here.
   issueSessionCookie(res, { id: user.id, email: user.email });
   logger.info({ userId: user.id, email: maskedEmail }, 'User signed in via Google');
   res.json({ user: { id: user.id, email: user.email } });
@@ -400,7 +398,6 @@ router.post('/forgot-password', async (req, res) => {
     .single();
 
   if (!user || !user.password_hash) {
-    // No account, or a Google-only account with no password to reset.
     logger.info({ email: maskedEmail }, 'Password reset - no resettable account (silent)');
     return res.json(genericResponse);
   }
