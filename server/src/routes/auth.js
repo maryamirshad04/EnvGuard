@@ -26,6 +26,8 @@ const COOKIE_OPTIONS = {
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
 const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
+const pendingCliRequests = new Map();
+
 function issueSessionCookie(res, user) {
   const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
     expiresIn: '7d',
@@ -642,6 +644,70 @@ router.post('/2fa/disable', requireAuth, async (req, res) => {
 
   logger.info({ userId: req.user.userId }, '2FA disabled successfully');
   res.json({ enabled: false });
+});
+
+router.post('/cli/initiate', async (req, res) => {
+  const userCode = crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
+  const deviceCode = crypto.randomBytes(16).toString('hex');
+  pendingCliRequests.set(deviceCode, {
+    userCode,
+    status: 'pending',
+    userId: null,
+    createdAt: Date.now(),
+  });
+  res.json({ userCode, deviceCode, expiresIn: 600 }); 
+});
+
+router.post('/cli/approve', requireAuth, async (req, res) => {
+  const { code } = req.body;
+  for (const [deviceCode, data] of pendingCliRequests) {
+    if (data.userCode === code && data.status === 'pending') {
+      data.status = 'approved';
+      data.userId = req.user.userId;
+      return res.json({ success: true });
+    }
+  }
+  res.status(404).json({ error: 'Invalid or expired code' });
+});
+
+router.get('/cli/status/:deviceCode', async (req, res) => {
+  const { deviceCode } = req.params;
+  const data = pendingCliRequests.get(deviceCode);
+
+  if (!data) {
+    return res.status(404).json({ error: 'Invalid device code' });
+  }
+
+  if (data.status === 'approved') {
+    // Fetch the user's email from the database
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', data.userId)
+      .single();
+
+    if (error || !user) {
+      logger.error({ userId: data.userId, error: error?.message }, 'User not found for CLI token generation');
+      return res.status(500).json({ error: 'User not found' });
+    }
+
+    // Generate a JWT for CLI use (long-lived)
+    const token = jwt.sign(
+      { userId: data.userId, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    pendingCliRequests.delete(deviceCode);
+
+    return res.json({ status: 'approved', token });
+  }
+
+  if (data.status === 'pending') {
+    return res.json({ status: 'pending' });
+  }
+
+  return res.json({ status: 'expired' });
 });
 
 module.exports = router;

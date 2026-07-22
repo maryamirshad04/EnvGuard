@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_URL}${path}`, {
@@ -43,6 +43,10 @@ export const api = {
     disable: (password) =>
       request('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ password }) }),
     dismissPrompt: () => request('/api/auth/2fa/dismiss-prompt', { method: 'POST' }),
+  },
+
+  cli: {
+    approve: (code) => request('/api/auth/cli/approve', { method: 'POST', body: JSON.stringify({ code }) }),
   },
 
   companies: {

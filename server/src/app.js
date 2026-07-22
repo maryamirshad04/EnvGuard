@@ -7,6 +7,7 @@ const authRoutes = require('./src/routes/auth');
 const companyRoutes = require('./src/routes/companies');
 const inviteRoutes = require('./src/routes/invites');
 const shareRoutes = require('./src/routes/share');
+const cliRoutes = require('./src/routes/cli');
 const logger = require('./src/utils/logger');
 
 const app = express();
@@ -36,17 +37,15 @@ app.use(
   })
 );
 
-// --- Other middleware ---
 app.use(express.json());
 app.use(cookieParser());
 
-// --- Routes ---
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/cli', cliRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api', shareRoutes);
 
-// Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use((req, res, next) => {

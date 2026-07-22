@@ -429,6 +429,30 @@ router.post('/:companySlug/projects/:projectSlug/environments', requireMember, a
   res.status(201).json({ environment: data });
 });
 
+router.get('/:companySlug/projects/:projectSlug/environments', requireMember, async (req, res) => {
+  const companyId = req.companyId;
+  const { projectSlug } = req.params;
+  logger.info({ userId: req.user.userId, companyId, projectSlug }, 'Fetching environments');
+
+  const project = await getCompanyProject(companyId, projectSlug);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const { data, error } = await supabase
+    .from('environments')
+    .select('*')
+    .eq('project_id', project.id)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    logger.error({ userId: req.user.userId, projectId: project.id, error: error.message }, 'Failed to fetch environments');
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ environments: data });
+});
+
 router.get('/:companySlug/projects/:projectSlug/environments/:envId/variables', requireMember, async (req, res) => {
   const companyId = req.companyId;
   const { projectSlug, envId } = req.params;
