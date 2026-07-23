@@ -1,14 +1,13 @@
 const axios = require('axios');
 const config = require('./config');
 
-const API_URL = process.env.ENVGUARD_API_URL || 'https://env-guardd.vercel.app/api';
+const API_URL = process.env.ENVGUARD_API_URL || 'https://env-guard-iota.vercel.app/api';
 
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: false, // CLI uses token header
+  withCredentials: false, 
 });
 
-// Add token to every request if present
 api.interceptors.request.use((req) => {
   const token = config.getToken();
   if (token) {
@@ -17,7 +16,6 @@ api.interceptors.request.use((req) => {
   return req;
 });
 
-// Response interceptor to handle auth errors
 api.interceptors.response.use(
   (res) => res,
   (err) => {

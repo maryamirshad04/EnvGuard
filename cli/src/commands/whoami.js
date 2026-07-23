@@ -3,7 +3,6 @@ const api = require('../api');
 module.exports = async function whoami() {
   try {
     const res = await api.get('/auth/me');
-    // The API returns { user: { userId, email } }
     const email = res.data.user?.email;
     if (email) {
       console.log(`Logged in as ${email}`);

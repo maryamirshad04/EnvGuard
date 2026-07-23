@@ -4,7 +4,7 @@ const pkg = require('../package.json');
 
 program.version(pkg.version);
 
-// Login / logout / whoami (unchanged)
+// Login / logout / whoami 
 program
   .command('login')
   .description('Log in to EnvGuard')
@@ -20,7 +20,7 @@ program
   .description('Show current user')
   .action(require('./commands/whoami'));
 
-// Company (unchanged)
+// Company 
 const company = program.command('company').description('Manage companies');
 company
   .command('list')
@@ -35,7 +35,7 @@ company
   .description('Show selected company')
   .action(require('./commands/company/current'));
 
-// Project (unchanged)
+// Project 
 const project = program.command('project').description('Manage projects');
 project
   .command('list')
@@ -50,7 +50,7 @@ project
   .description('Show selected project')
   .action(require('./commands/project/current'));
 
-// Environment (NEW)
+// Environment 
 const environment = program.command('environment').description('Manage environments');
 environment
   .command('list')
@@ -65,7 +65,7 @@ environment
   .description('Show selected environment')
   .action(require('./commands/environment/current'));
 
-// Variable (update with reveal)
+// Variable 
 const variable = program.command('variable').description('Manage environment variables');
 variable
   .command('list')

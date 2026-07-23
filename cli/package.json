@@ -1,9 +1,9 @@
 {
-  "name": "envguard-cli",
-  "version": "1.0.0",
-  "description": "EnvGuard CLI - manage encrypted environment variables from the terminal",
+  "name": "envguard-secrets",
+  "version": "1.0.2",
+  "description": "EnvGuard secrets - manage encrypted environment variables from the terminal",
   "bin": {
-    "envguard": "./bin/envguard.js"
+    "envguard": "bin/envguard.js"
   },
   "main": "src/index.js",
   "dependencies": {

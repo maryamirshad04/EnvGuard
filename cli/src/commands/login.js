@@ -16,20 +16,20 @@ module.exports = async function login() {
     spinner.fail('Failed to initiate login');
     throw err;
   }
-
-  const approvalUrl = `http://localhost:3000/cli-login?code=${userCode}`;
+  
+  const webUrl = process.env.ENVGUARD_WEB_URL || 'https://env-guardd.vercel.app';
+  const approvalUrl = `${webUrl}/cli-login?code=${userCode}`;
   console.log(`\nOpen this URL in your browser to approve:\n${chalk.blue(approvalUrl)}\n`);
   try {
     await open(approvalUrl);
     console.log('Browser opened automatically. If not, copy the URL above and open it manually.');
   } catch (e) {
-    // open failed – continue
   }
 
   // Wait for approval
   spinner.start('Waiting for approval...');
   let attempts = 0;
-  const maxAttempts = 60; // 10 minutes (10s intervals)
+  const maxAttempts = 60;
   while (attempts < maxAttempts) {
     await new Promise(resolve => setTimeout(resolve, 10000));
     try {

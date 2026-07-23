@@ -58,8 +58,6 @@ function setSelectedProject(slug) {
   updateConfig({ selectedProject: slug });
 }
 
-// ... (existing code) ...
-
 function getSelectedEnvironment() {
   const config = readConfig();
   return config.selectedEnvironment || null;

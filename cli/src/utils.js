@@ -1,11 +1,6 @@
 const api = require('./api');
 const config = require('./config');
 
-/**
- * Resolve an environment identifier (name or ID) to an actual ID.
- * If the input looks like a UUID (length 36), return it as-is.
- * Otherwise treat it as a name and fetch the environment list.
- */
 async function resolveEnvironmentId(companySlug, projectSlug, input) {
   if (!input) return null;
   // Simple UUID check (36 chars, with hyphens)

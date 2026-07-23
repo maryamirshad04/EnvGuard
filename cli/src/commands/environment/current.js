@@ -10,6 +10,6 @@ module.exports = async function currentEnvironment() {
   if (envName) {
     console.log(`Selected environment: ${envName}`);
   } else {
-    console.log(`Selected environment: ${envId}`); // fallback
+    console.log(`Selected environment: ${envId}`);
   }
 };
