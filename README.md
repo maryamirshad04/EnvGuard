@@ -261,7 +261,7 @@ npm install -g envguard-secrets@latest
 Verify installation:
 
 ```bash
-envguard --version (101)
+envguard --version (103)
 ```
 
 ---
