@@ -23,9 +23,10 @@ module.exports = async function listProjects() {
 
     const table = new Table({ head: ['Name'] });
     projects.forEach(p => {
-      table.push([p.name]);
+      table.push([p.slug]);
     });
     console.log(table.toString());
+    console.log('\nUse `envguard project select <slug>` to select a project.');
   } catch (err) {
     console.error('Failed to list projects:', err.response?.data?.error || err.message);
   }

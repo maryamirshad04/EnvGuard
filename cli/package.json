@@ -1,6 +1,6 @@
 {
   "name": "envguard-secrets",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "EnvGuard secrets - manage encrypted environment variables from the terminal",
   "bin": {
     "envguard": "bin/envguard.js"
